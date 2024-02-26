@@ -31,7 +31,7 @@ class PrecNet(eqx.Module):
     EdgeEncoder: Callable
     MessagePass: Callable
     EdgeDecoder: Callable
-    mp_rounds: int
+    mp_rounds: int = eqx.field(static=True)
         
     def __init__(self, NodeEncoder, EdgeEncoder, MessagePass, EdgeDecoder, mp_rounds):
         super(PrecNet, self).__init__()
