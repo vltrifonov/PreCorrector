@@ -45,7 +45,7 @@ class PrecNet(eqx.Module):
     def __call__(self, graph, bi_edges_indx):
         graph.nodes = self.NodeEncoder(graph.nodes)
         graph.edges = self.NodeEncoder(graph.edges)
-        for _ in range(mp_rounds):
+        for _ in range(self.mp_rounds):
             graph = self.MessagePass(graph)
         graph = bi_direc_edge_avg(graph, bi_edges_indx)
         low_tri = graph_to_low_tri_mat(graph)
