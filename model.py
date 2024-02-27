@@ -1,9 +1,10 @@
 from typing import Callable
 
+from jax import random
 import jax.numpy as jnp
 import equinox as eqx
 
-from utils import graph_to_low_tri_mat, bi_direc_edge_round
+from utils import graph_to_low_tri_mat
 from data import bi_direc_edge_avg
 
 class MLP(eqx.Module):
@@ -35,9 +36,13 @@ class PrecNet(eqx.Module):
         
     def __init__(self, NodeEncoder, EdgeEncoder, MessagePass, EdgeDecoder, mp_rounds):
         super(PrecNet, self).__init__()
+        @concatenated_args
         self.NodeEncoder = NodeEncoder
+        @concatenated_args
         self.EdgeEncoder = EdgeEncoder
+        @concatenated_args
         self.MessagePass = MessagePass
+        @concatenated_args
         self.EdgeDecoder = EdgeDecoder
         self.mp_rounds = mp_rounds
         return

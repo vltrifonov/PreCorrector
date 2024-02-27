@@ -3,7 +3,7 @@
 # first we update node values, then edge values (original implementation updates edges first).
 
 import functools
-from typing import Any, Optional
+from typing import Any, Optional, Union, Iterable, Mapping, Optional, Callable
 
 import jax
 import jax.numpy as jnp
@@ -12,6 +12,59 @@ import jax.tree_util as tree
 from jraph._src import graph as gn_graph
 from jraph._src import utils
 
+# As of 04/2020 pytype doesn't support recursive types.
+# pytype: disable=not-supported-yet
+ArrayTree = Union[jnp.ndarray, Iterable['ArrayTree'], Mapping[Any, 'ArrayTree']]
+
+# All features will be an ArrayTree.
+NodeFeatures = EdgeFeatures = SenderFeatures = ReceiverFeatures = Globals = ArrayTree
+
+# Signature:
+# (edges of each node to be aggregated, segment ids, number of segments) ->
+# aggregated edges
+AggregateEdgesToNodesFn = Callable[
+    [EdgeFeatures, jnp.ndarray, int], NodeFeatures]
+
+# Signature:
+# (nodes of each graph to be aggregated, segment ids, number of segments) ->
+# aggregated nodes
+AggregateNodesToGlobalsFn = Callable[[NodeFeatures, jnp.ndarray, int],
+                                     Globals]
+
+# Signature:
+# (edges of each graph to be aggregated, segment ids, number of segments) ->
+# aggregated edges
+AggregateEdgesToGlobalsFn = Callable[[EdgeFeatures, jnp.ndarray, int],
+                                     Globals]
+
+# Signature:
+# (edge features, sender node features, receiver node features, globals) ->
+# attention weights
+AttentionLogitFn = Callable[
+    [EdgeFeatures, SenderFeatures, ReceiverFeatures, Globals], ArrayTree]
+
+# Signature:
+# (edge features, weights) -> edge features for node update
+AttentionReduceFn = Callable[[EdgeFeatures, ArrayTree], EdgeFeatures]
+
+# Signature:
+# (edges to be normalized, segment ids, number of segments) ->
+# normalized edges
+AttentionNormalizeFn = Callable[[EdgeFeatures, jnp.ndarray, int], EdgeFeatures]
+
+# Signature:
+# (edge features, sender node features, receiver node features, globals) ->
+# updated edge features
+GNUpdateEdgeFn = Callable[
+    [EdgeFeatures, SenderFeatures, ReceiverFeatures, Globals], EdgeFeatures]
+
+# Signature:
+# (node features, outgoing edge features, incoming edge features,
+#  globals) -> updated node features
+GNUpdateNodeFn = Callable[
+    [NodeFeatures, SenderFeatures, ReceiverFeatures, Globals], NodeFeatures]
+
+GNUpdateGlobalFn = Callable[[NodeFeatures, EdgeFeatures, Globals], Globals]
 def GraphNetwork_NodeEdge(
     update_edge_fn: Optional[GNUpdateEdgeFn],
     update_node_fn: Optional[GNUpdateNodeFn],
@@ -67,8 +120,8 @@ def GraphNetwork_NodeEdge(
     """
     not_both_supplied = lambda x, y: (x != y) and ((x is None) or (y is None))
     if not_both_supplied(attention_reduce_fn, attention_logit_fn):
-    raise ValueError(('attention_logit_fn and attention_reduce_fn must both be'
-                      ' supplied.'))
+        raise ValueError(('attention_logit_fn and attention_reduce_fn must both be'
+                          ' supplied.'))
 
     def _ApplyGraphNet(graph):
         """Applies a configured GraphNetwork to a graph.
@@ -97,10 +150,8 @@ def GraphNetwork_NodeEdge(
         # Equivalent to jnp.sum(n_node), but jittable
         sum_n_node = tree.tree_leaves(nodes)[0].shape[0]
         sum_n_edge = senders.shape[0]
-        if not tree.tree_all(
-            tree.tree_map(lambda n: n.shape[0] == sum_n_node, nodes)):
-            raise ValueError(
-              'All node arrays in nest must contain the same number of nodes.')
+        if not tree.tree_all(tree.tree_map(lambda n: n.shape[0] == sum_n_node, nodes)):
+            raise ValueError('All node arrays in nest must contain the same number of nodes.')
 
         sent_attributes = tree.tree_map(lambda n: n[senders], nodes)
         received_attributes = tree.tree_map(lambda n: n[receivers], nodes)
