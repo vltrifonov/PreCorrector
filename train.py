@@ -5,7 +5,7 @@ import jax.numpy as jnp
 from loss import LLT_loss
 from tqdm.notebook import tqdm
 
-def compute_loss(model, X, y):
+def compute_loss_LLT(model, X, y):
     '''Graph was made out of lhs A.
        Positions in `X`:
          X[0] - nodes of the graph.
@@ -47,10 +47,11 @@ def train(model, data, train_config, compute_loss):
     def train_body(model, X_train, X_test, y_train, y_test, opt_state):
         loss_train, model, opt_state = make_step(model, X_train, y_train, opt_state)
         loss_test = make_val_step(model, X_test, y_test)
-        return loss_train, loss_test
+        return model, opt_state, loss_train, loss_test
 
+    loss_ls = []
     for ep in tqdm(range(train_config['epoch_num'])):
-        loss_train, loss_test = train_body(model, X_train, X_test, y_train, y_test, opt_state)
-        print(loss_train, loss_test)
-    
-    return model
+        model, opt_state, loss_train, loss_test = train_body(model, X_train, X_test, y_train, y_test, opt_state)
+        print(f'Epoch: {ep}, train loss: {loss_train}, test loss:{loss_test}')
+        loss_ls.append([loss_train, loss_test])
+    return model, jnp.stack(jnp.asarray(loss_ls))

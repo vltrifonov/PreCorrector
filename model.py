@@ -3,6 +3,7 @@ from typing import Callable
 from jax import random
 import jax.numpy as jnp
 import jax.tree_util as tree
+import jax.nn as jnn
 
 from jax.ops import segment_sum
 import equinox as eqx
@@ -30,7 +31,6 @@ class PrecNet(eqx.Module):
         nodes, edges, receivers, senders = self.MessagePass(nodes, edges, receivers, senders)
         edges = bi_direc_edge_avg(edges, bi_edges_indx)
         edges = self.EdgeDecoder(edges)
-#         return edges
         low_tri = graph_to_low_tri_mat(nodes, jnp.squeeze(edges), receivers, senders)
         return low_tri
     
@@ -39,7 +39,7 @@ class FullyConnectedNet(eqx.Module):
     layers: list
     act: Callable = eqx.field(static=True)
         
-    def __init__(self, features, N_layers, key, act):
+    def __init__(self, features, N_layers, key, act=jnn.relu):
 #         super(FullyConnectedNet, self).__init__()
         N_in, N_pr, N_out = features
         keys = random.split(key, N_layers)
