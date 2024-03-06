@@ -14,9 +14,13 @@ from utils import has_edge, is_bi_direc_edge, edge_index
 
 # Datasets
 def dataset_LLT(grid, N_samples, seed):
+    h = 1. / grid
     key = random.PRNGKey(seed)
     A, b = get_A_b(grid, N_samples, key)
     u_exact = get_exact_solution(A, b, grid, N_samples)
+
+#     b = jnp.einsum('bi, b -> bi', b, 1./jnp.linalg.norm(b, axis=1))
+#     u_exact = jnp.einsum('bi, b -> bi', u_exact, 1./jnp.linalg.norm(u_exact, axis=1))    
     
     nodes, edges, receivers, senders, n_node, n_edge = direc_graph_from_linear_system_sparse(A, b)
     bi_edges = bi_direc_indx(receivers[0, ...], senders[0, ...], n_node[1]) 

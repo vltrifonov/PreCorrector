@@ -1,3 +1,4 @@
+import jax
 import jax.numpy as jnp
 from jax import random, lax, vmap
 from jax.ops import segment_sum
@@ -36,6 +37,24 @@ def batch_indices(key, arr, batch_size):
     bacth_num = n_samples // batch_size
     batch_indices = random.choice(key, list_of_indices, shape=[bacth_num, batch_size])
     return batch_indices, bacth_num
+
+def params_count(model):
+    return sum([2*i.size if i.dtype == jnp.complex128 else i.size for i in jax.tree_util.tree_leaves(eqx.filter(model, eqx.is_array))])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 class JaxTrainer(object):
     '''Utility class which allows different initialization of 

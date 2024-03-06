@@ -1,9 +1,8 @@
 import equinox as eqx
-from jax import vmap 
+from jax import vmap, lax
 import jax.numpy as jnp
 
 from loss import LLT_loss
-from tqdm.notebook import tqdm
 
 def compute_loss_LLT(model, X, y):
     '''Graph was made out of lhs A.
@@ -14,10 +13,15 @@ def compute_loss_LLT(model, X, y):
          X[3] - senders of the graph.
          X[4] - indices of bi-directional edges in the graph.
          X[5] - solution of linear system x.
-         X[5] - rhs b.
+         X[6] - rhs b.
      '''
-    L = vmap(model, in_axes=(0, 0, 0, 0, 0), out_axes=(0))(X[0], X[1], X[2], X[3], X[4])
-    loss = vmap(LLT_loss, in_axes=(0, 0, 0), out_axes=(0))(L, X[5], X[6])
+    nodes = jnp.einsum('bi, b -> bi', X[0], 1./jnp.linalg.norm(X[0], axis=1))
+    edges = jnp.einsum('bi, b -> bi', X[1], 1./jnp.linalg.norm(X[0], axis=1))
+    solution = jnp.einsum('bi, b -> bi', X[5], 1./jnp.linalg.norm(X[0], axis=1))
+#     b = jnp.einsum('bi, b -> bi', X[6], 1./jnp.linalg.norm(X[6], axis=1))
+    
+    L = vmap(model, in_axes=(0, 0, 0, 0, 0), out_axes=(0))(X[0], X[1], X[2], X[3], X[4])#(nodes, edges, X[2], X[3], X[4])#(X[0], X[1], X[2], X[3], X[4])
+    loss = vmap(LLT_loss, in_axes=(0, 0, 0), out_axes=(0))(L, X[5], X[6])#(L, solution, b)#(L, X[5], X[6])
     return jnp.mean(loss)
 
 def train(model, data, train_config, compute_loss):
@@ -44,14 +48,24 @@ def train(model, data, train_config, compute_loss):
         loss = compute_loss(model, X, y)
         return loss
     
-    def train_body(model, X_train, X_test, y_train, y_test, opt_state):
+#     def train_body(model, X_train, X_test, y_train, y_test, opt_state):
+#         loss_train, model, opt_state = make_step(model, X_train, y_train, opt_state)
+#         loss_test = make_val_step(model, X_test, y_test)
+#         return model, opt_state, loss_train, loss_test
+#     loss_ls = []
+#     for ep in range(train_config['epoch_num']):
+#         model, opt_state, loss_train, loss_test = train_body(model, X_train, X_test, y_train, y_test, opt_state)
+#         print(f'Epoch: {ep}, train loss: {loss_train}, test loss:{loss_test}')
+#         loss_ls.append([loss_train, loss_test])
+#     return model, jnp.stack(jnp.asarray(loss_ls))
+    def train_body(carry, x):
+        model, opt_state = carry
         loss_train, model, opt_state = make_step(model, X_train, y_train, opt_state)
         loss_test = make_val_step(model, X_test, y_test)
-        return model, opt_state, loss_train, loss_test
-
-    loss_ls = []
-    for ep in tqdm(range(train_config['epoch_num'])):
-        model, opt_state, loss_train, loss_test = train_body(model, X_train, X_test, y_train, y_test, opt_state)
-        print(f'Epoch: {ep}, train loss: {loss_train}, test loss:{loss_test}')
-        loss_ls.append([loss_train, loss_test])
-    return model, jnp.stack(jnp.asarray(loss_ls))
+        carry = (model, opt_state)
+        return carry, [loss_train, loss_test]
+        
+    
+    carry_init = (model, opt_state)
+    (model, _), losses = lax.scan(train_body, carry_init, None, length=train_config['epoch_num'])
+    return model, losses
