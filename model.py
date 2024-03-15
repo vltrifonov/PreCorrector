@@ -16,9 +16,9 @@ class PrecNet(eqx.Module):
     EdgeEncoder: eqx.Module
     MessagePass: eqx.Module
     EdgeDecoder: eqx.Module
-        
+
     def __init__(self, NodeEncoder, EdgeEncoder, MessagePass, EdgeDecoder):
-#         super(PrecNet, self).__init__()
+        super(PrecNet, self).__init__()
         self.NodeEncoder = NodeEncoder
         self.EdgeEncoder = EdgeEncoder
         self.MessagePass = MessagePass
@@ -40,7 +40,7 @@ class FullyConnectedNet(eqx.Module):
     act: Callable = eqx.field(static=True)
         
     def __init__(self, features, N_layers, key, act=jnn.relu):
-#         super(FullyConnectedNet, self).__init__()
+        super(FullyConnectedNet, self).__init__()
         N_in, N_pr, N_out = features
         keys = random.split(key, N_layers)
         Ns = [N_in,] + [N_pr,] * (N_layers - 1) + [N_out,]
@@ -63,7 +63,7 @@ class MessagePassing(eqx.Module):
         
     def __init__(self, update_edge_fn, update_node_fn, mp_rounds,
                 aggregate_edges_for_nodes_fn=segment_sum):
-#         super(MessagePassing, self).__init__()
+        super(MessagePassing, self).__init__()
         self.update_edge_fn = update_edge_fn
         self.update_node_fn = update_node_fn
         self.aggregate_edges_for_nodes_fn = aggregate_edges_for_nodes_fn
@@ -76,30 +76,29 @@ class MessagePassing(eqx.Module):
             edges = self._update_edges(nodes, edges, receivers, senders)
         return nodes, edges, receivers, senders
     
+    # CHECK
     def _update_nodes(self, nodes, edges, receivers, senders):
-#         print(nodes.shape)
         sum_n_node = tree.tree_leaves(nodes)[0].shape[1]
-        
-#         print(sum_n_node)
-#         print(edges.shape, jnp.einsum('ij->ji', edges).shape, senders.shape)
         sent_attributes = tree.tree_map(lambda e: self.aggregate_edges_for_nodes_fn(e, senders, sum_n_node), jnp.einsum('ij->ji', edges))
-#         print(sent_attributes.shape)
         sent_attributes = jnp.einsum('ij->ji', sent_attributes)
         
         received_attributes = tree.tree_map(lambda e: self.aggregate_edges_for_nodes_fn(e, receivers, sum_n_node), jnp.einsum('ij->ji', edges))
         received_attributes = jnp.einsum('ij->ji', received_attributes)
-        
-#         print(f'Update nodes: {sent_attributes.shape, received_attributes.shape}')
-#         print(nodes.shape, sent_attributes.shape, received_attributes.shape)
-#         print(jnp.concatenate([nodes, sent_attributes, received_attributes], axis=1).shape)
         nodes = self.update_node_fn(jnp.concatenate([nodes, sent_attributes, received_attributes], axis=0))
         return nodes
     
     def _update_edges(self, nodes, edges, receivers, senders):
-#         print(nodes.shape)
         sent_attributes = tree.tree_map(lambda n: n[:, senders], nodes)
         received_attributes = tree.tree_map(lambda n: n[:, receivers], nodes)
-        
-#         print(f'Update edges: {sent_attributes.shape, received_attributes.shape}')
-        edges = self.update_edge_fn(jnp.concatenate([edges, sent_attributes, received_attributes], axis=0))
+
+        # Find non-main-diagonal edges
+        non_diag_edge_idx = jnp.nonzero(jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]])), size=senders.shape[0]-nodes.shape[1], fill_value=jnp.nan)[0].astype(jnp.int32)
+
+        feat_in = jnp.concatenate([
+            edges[:, non_diag_edge_idx],
+            sent_attributes[:, non_diag_edge_idx],
+            received_attributes[:, non_diag_edge_idx]
+        ], axis=0)
+        edges_upd = self.update_edge_fn(feat_in)
+        edges = edges.at[:, non_diag_edge_idx].set(edges_upd)
         return edges

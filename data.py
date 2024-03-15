@@ -14,13 +14,9 @@ from utils import has_edge, is_bi_direc_edge, edge_index
 
 # Datasets
 def dataset_LLT(grid, N_samples, seed):
-    h = 1. / grid
     key = random.PRNGKey(seed)
     A, b = get_A_b(grid, N_samples, key)
-    u_exact = get_exact_solution(A, b, grid, N_samples)
-
-#     b = jnp.einsum('bi, b -> bi', b, 1./jnp.linalg.norm(b, axis=1))
-#     u_exact = jnp.einsum('bi, b -> bi', u_exact, 1./jnp.linalg.norm(u_exact, axis=1))    
+    u_exact = get_exact_solution(A, b, grid, N_samples)  
     
     nodes, edges, receivers, senders, n_node, n_edge = direc_graph_from_linear_system_sparse(A, b)
     bi_edges = bi_direc_indx(receivers[0, ...], senders[0, ...], n_node[1]) 
@@ -40,6 +36,7 @@ def direc_graph_from_linear_system_sparse(A, b):
     n_edge = jnp.array([senders.shape[0], senders.shape[1]])
     return nodes, edges, receivers, senders, n_node, n_edge
 
+
 def bi_direc_indx(receivers, senders, n_node):
     '''Returns indices of edges which corresponds to bi-direcional connetions.'''
     r_s = jnp.hstack([receivers[..., None], senders[..., None]])
@@ -55,13 +52,9 @@ def bi_direc_indx(receivers, senders, n_node):
     bi_edge_pairs = bi_edge_pairs[non_duplicated_nodes]
     return bi_edge_pairs
 
-# DOUBLE-CHECK
 def bi_direc_edge_avg(edges, indices):
-#     edges_upd = edges.copy()
-#     for i in range(len(indices)):
-#         edges_upd = edges_upd.at[indices[i]].set(jnp.mean(edges_upd[indices[i]]))
-    b = len(edges)
-    edges_upd = edges.at[:, indices].set(edges[:, indices].mean(-1).reshape(b, -1, 1))
+    f = len(edges)
+    edges_upd = edges.at[:, indices].set(edges[:, indices].mean(-1).reshape(f, -1, 1))
     return edges_upd
 
 # Discretization
@@ -77,12 +70,12 @@ def get_functions(key):
     rhs = lambda x, y, c=c_[0]: random_polynomial_2D(x, y, c)
     return rhs
 
-def get_A_b(grid, N_samples, key):
+def get_A_b(grid, N_samples, key, discret=FD_2D):
     keys = random.split(key, N_samples)
     A, rhs = [], []
     
     for key in keys:
-        rhs_sample, A_sample = FD_2D(grid, [lambda x, y: 1, get_functions(key)])
+        rhs_sample, A_sample = discret(grid, [lambda x, y: 1, get_functions(key)])
         A.append(A_sample.reshape(1, grid**2, -1))
         rhs.append(rhs_sample)
     A = device_put(jsparse.bcoo_concatenate(A, dimension=0))

@@ -5,3 +5,6 @@ def LLT_loss(L, x, b):
 
 def Notay_loss(**kwargs):
     pass
+
+def mse_loss(L, A):
+    return jnp.square(jnp.linalg.norm(L @ L.T - A.todense(), ord=2))
