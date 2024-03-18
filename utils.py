@@ -1,13 +1,12 @@
 import jax
 import jax.numpy as jnp
-from jax import random, lax, vmap
-from jax.ops import segment_sum
-
+from jax import random
 import equinox as eqx
-
-from functools import partial
-from typing import Iterable
     
+def graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders):
+    # TODO
+    pass
+
 def graph_to_low_tri_mat(nodes, edges, receivers, senders):
     L = jnp.zeros([nodes.shape[1]]*2)
     L = L.at[senders, receivers].set(edges)
@@ -27,35 +26,27 @@ def params_count(model):
 
 
 
-def get_mi_fcg(i, m_max):
-    return jnp.maximum(1, i % (m_max+1))
+# def get_mi_fcg(i, m_max):
+#     return jnp.maximum(1, i % (m_max+1))
 
-def has_edge(receivers, senders, node1, node2): 
-    node1_connected_to = receivers[senders == node1]
-    connect = node2 in node1_connected_to
-    return connect
+# def has_edge(receivers, senders, node1, node2): 
+#     node1_connected_to = receivers[senders == node1]
+#     connect = node2 in node1_connected_to
+#     return connect
 
-def is_bi_direc_edge(receivers, senders, node1, node2):
-    n1_to_n2 = has_edge(receivers, senders, node1, node2)
-    n2_to_n1 = has_edge(receivers, senders, node2, node1)
-    return n1_to_n2 and n2_to_n1
+# def is_bi_direc_edge(receivers, senders, node1, node2):
+#     n1_to_n2 = has_edge(receivers, senders, node1, node2)
+#     n2_to_n1 = has_edge(receivers, senders, node2, node1)
+#     return n1_to_n2 and n2_to_n1
     
-def edge_index(receivers, senders, node1, node2):
-    send_indx = jnp.nonzero(senders == node1)[0][0]              # First edge index of this sender
-    node1_connected_to = receivers[senders == node1]             # To what nodes first node is connected
-    rec_indx = jnp.nonzero(node1_connected_to == node2)[0][0]    # Index of needed node within 
-    return send_indx + rec_indx
+# def edge_index(receivers, senders, node1, node2):
+#     send_indx = jnp.nonzero(senders == node1)[0][0]              # First edge index of this sender
+#     node1_connected_to = receivers[senders == node1]             # To what nodes first node is connected
+#     rec_indx = jnp.nonzero(node1_connected_to == node2)[0][0]    # Index of needed node within 
+#     return send_indx + rec_indx
 
 
-
-
-
-
-
-
-
-
-
+## Bin
 # class JaxTrainer(object):
 #     '''Utility class which allows different initialization of 
 #        training functions for different neural networks with JAX.'''

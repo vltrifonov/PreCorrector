@@ -1,10 +1,7 @@
-import itertools
 import jax.numpy as jnp
 from jax import random, vmap
 from jax.experimental import sparse as jsparse
 from jax.lax import scan
-
-from data import direc_graph_from_linear_system_sparse, bi_direc_indx
 
 def apply_Jacobi(model, res, nodes, edges, receivers, senders, bi_edges_indx, A):
     diags = vmap(jnp.diag, in_axes=(0), out_axes=(0))(A.todense())

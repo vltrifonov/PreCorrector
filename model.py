@@ -61,8 +61,7 @@ class MessagePassing(eqx.Module):
     aggregate_edges_for_nodes_fn: Callable = eqx.field(static=True)
     mp_rounds: int = eqx.field(static=True)
         
-    def __init__(self, update_edge_fn, update_node_fn, mp_rounds,
-                aggregate_edges_for_nodes_fn=segment_sum):
+    def __init__(self, update_edge_fn, update_node_fn, mp_rounds, aggregate_edges_for_nodes_fn=segment_sum):
         super(MessagePassing, self).__init__()
         self.update_edge_fn = update_edge_fn
         self.update_node_fn = update_node_fn
@@ -76,20 +75,13 @@ class MessagePassing(eqx.Module):
             edges = self._update_edges(nodes, edges, receivers, senders)
         return nodes, edges, receivers, senders
     
-    # CHECK
     def _update_nodes(self, nodes, edges, receivers, senders):
         sum_n_node = tree.tree_leaves(nodes)[0].shape[1]
-#         sent_attributes = tree.tree_map(lambda e: self.aggregate_edges_for_nodes_fn(e, senders, sum_n_node), jnp.einsum('ij->ji', edges))
-#         sent_attributes = jnp.einsum('ij->ji', sent_attributes)
-#         sent_attributes = vmap(tree.tree_map(lambda e: self.aggregate_edges_for_nodes_fn(e, senders, sum_n_node)),
-#                                in_axes=(0), out_axes=(0))(edges)
         sent_attributes = vmap(
             tree.tree_map, 
             in_axes=(None, 0), out_axes=(0)
         )(lambda e: self.aggregate_edges_for_nodes_fn(e, senders, sum_n_node), edges)
     
-#         received_attributes = tree.tree_map(lambda e: self.aggregate_edges_for_nodes_fn(e, receivers, sum_n_node), jnp.einsum('ij->ji', edges))
-#         received_attributes = jnp.einsum('ij->ji', received_attributes)
         received_attributes = vmap(
             tree.tree_map, 
             in_axes=(None, 0), out_axes=(0)
@@ -103,7 +95,8 @@ class MessagePassing(eqx.Module):
         received_attributes = tree.tree_map(lambda n: n[:, receivers], nodes)
 
         # Find non-main-diagonal edges
-        non_diag_edge_idx = jnp.nonzero(jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]])), size=senders.shape[0]-nodes.shape[1], fill_value=jnp.nan)[0].astype(jnp.int32)
+        non_diag_edge_idx = jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]]))
+        non_diag_edge_idx = jnp.nonzero(non_diag_edge_idx, size=senders.shape[0]-nodes.shape[1], fill_value=jnp.nan)[0].astype(jnp.int32)
 
         feat_in = jnp.concatenate([
             edges[:, non_diag_edge_idx],

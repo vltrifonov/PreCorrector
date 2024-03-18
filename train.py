@@ -1,6 +1,6 @@
-import equinox as eqx
 from jax import vmap, lax
 import jax.numpy as jnp
+import equinox as eqx
 
 from loss import LLT_loss, mse_loss
 

@@ -5,12 +5,11 @@ import numpy as np
 import jax.numpy as jnp
 from jax import random
 from jax.experimental import sparse as jsparse
-from jax.lax import scan, cond
+from jax.lax import scan
 from jax import device_put
 
 sys.path.append('/mnt/local/data/vtrifonov/FCG')
 from solvers import FD_2D
-from utils import has_edge, is_bi_direc_edge, edge_index
 
 # Datasets
 def dataset_LLT(grid, N_samples, seed):
@@ -26,6 +25,7 @@ def dataset_LLT(grid, N_samples, seed):
 def dataset_Notay(**kwargs):
     pass
 
+
 # Graphs
 def direc_graph_from_linear_system_sparse(A, b):
     '''Matrix `A` should be sparse and batched.'''
@@ -35,7 +35,6 @@ def direc_graph_from_linear_system_sparse(A, b):
     n_node = jnp.array([nodes.shape[0], nodes.shape[1]])
     n_edge = jnp.array([senders.shape[0], senders.shape[1]])
     return nodes, edges, receivers, senders, n_node, n_edge
-
 
 def bi_direc_indx(receivers, senders, n_node):
     '''Returns indices of edges which corresponds to bi-direcional connetions.'''
@@ -57,6 +56,7 @@ def bi_direc_edge_avg(edges, indices):
     edges_upd = edges.at[:, indices].set(edges[:, indices].mean(-1).reshape(f, -1, 1))
     return edges_upd
 
+
 # Discretization
 def random_polynomial_2D(x, y, coeff):
     res = 0
@@ -70,12 +70,12 @@ def get_functions(key):
     rhs = lambda x, y, c=c_[0]: random_polynomial_2D(x, y, c)
     return rhs
 
-def get_A_b(grid, N_samples, key, discret=FD_2D):
+def get_A_b(grid, N_samples, key, discretize=FD_2D):
     keys = random.split(key, N_samples)
     A, rhs = [], []
     
     for key in keys:
-        rhs_sample, A_sample = discret(grid, [lambda x, y: 1, get_functions(key)])
+        rhs_sample, A_sample = discretize(grid, [lambda x, y: 1, get_functions(key)])
         A.append(A_sample.reshape(1, grid**2, -1))
         rhs.append(rhs_sample)
     A = device_put(jsparse.bcoo_concatenate(A, dimension=0))
