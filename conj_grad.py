@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 from jax import random, vmap
 from jax.experimental import sparse as jsparse
-from jax.lax import scan
+from jax.lax import scan, linalg
 
 def apply_Jacobi(model, res, nodes, edges, receivers, senders, bi_edges_indx, A):
     diags = vmap(jnp.diag, in_axes=(0), out_axes=(0))(A.todense())
@@ -10,12 +10,15 @@ def apply_Jacobi(model, res, nodes, edges, receivers, senders, bi_edges_indx, A)
     omega = vmap(lambda P_inv, res: P_inv @ res, in_axes=(0, 0), out_axes=(0))(P_inv, res)
     return omega
 
+
 def apply_LLT(model, res, nodes, edges, receivers, senders, bi_edges_indx, A):
-    L = vmap(model, in_axes=(0, 0, 0, 0, 0), out_axes=(0))(nodes, edges, receivers, senders, bi_edges_indx)
-    L_inv = vmap(jnp.linalg.inv, in_axes=(0), out_axes=(0))(L)
-    L_invT = jnp.einsum('bij -> bji', L_inv)
-    L_invT_res = vmap(lambda L_invT, res: L_invT @ res, in_axes=(0, 0), out_axes=(0))(L_invT, res)
-    omega = vmap(lambda L_inv, L_invT_res: L_inv @ L_invT_res, in_axes=(0, 0), out_axes=(0))(L_inv, L_invT_res)
+    L = model(nodes, edges, receivers, senders, bi_edges_indx).todense()
+#     LT = jsparse.BCSR.from_bcoo(jsparse.bcoo_transpose(L, permutation=[1, 0]))
+#     L = jsparse.BCSR.from_bcoo(L)
+#     y = jsparse.linalg.spsolve(L.data, L.indices, L.indptr, res)
+#     omega = jsparse.linalg.spsolve(LT.data, LT.indices, LT.indptr, y)
+    y = linalg.triangular_solve(L, res, left_side=True, lower=True)
+    omega = linalg.triangular_solve(L, y, transpose_a=True, left_side=True, lower=True)
     return omega
 
 def apply_Notay(**kwargs):
@@ -70,3 +73,13 @@ def ConjGrad(data, N_iter, model=None, prec_func=None, m_max=None, loss=None, ep
     carry_init = (X, R, Z, P)        
     (X, R, Z, _), _ = scan(cg_body, carry_init, jnp.arange(1, N_iter))
     return X, R, Z
+
+
+
+# def apply_LLT(model, res, nodes, edges, receivers, senders, bi_edges_indx, A):
+#     L = vmap(model, in_axes=(0, 0, 0, 0, 0), out_axes=(0))(nodes, edges, receivers, senders, bi_edges_indx).todense()
+#     L_inv = vmap(jnp.linalg.inv, in_axes=(0), out_axes=(0))(L)
+#     L_invT = jnp.einsum('bij -> bji', L_inv)
+#     L_invT_res = vmap(lambda L_invT, res: L_invT @ res, in_axes=(0, 0), out_axes=(0))(L_invT, res)
+#     omega = vmap(lambda L_inv, L_invT_res: L_inv @ L_invT_res, in_axes=(0, 0), out_axes=(0))(L_inv, L_invT_res)
+#     return omega

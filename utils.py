@@ -1,16 +1,31 @@
 import jax
 import jax.numpy as jnp
 from jax import random
+from jax.experimental import sparse as jsparse
 import equinox as eqx
-    
-def graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders):
-    # TODO
-    pass
 
+from jax._src.lax import lax as lax_internal
+
+def graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders):
+    "Lower traingle structure shoule be in the graph format."
+    bcoo_ind = jnp.concatenate([senders[:, None], receivers[:, None]], axis=-1)
+    bcoo_L = jsparse.BCOO((edges, bcoo_ind), shape=(nodes.shape[-1], nodes.shape[-1]))
+    return bcoo_L
+    
 def graph_to_low_tri_mat(nodes, edges, receivers, senders):
-    L = jnp.zeros([nodes.shape[1]]*2)
+    "Making triangular matrix explicitly. "
+    L = jnp.zeros([nodes.shape[-1]]*2)
     L = L.at[senders, receivers].set(edges)
     return jnp.tril(L)
+    
+def graph_tril(nodes, edges, receivers, senders):
+    "Get low triagnle structure implicitly in graph format"
+    tril_ind = jnp.where(jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]])) > 0, 0, 1)   
+    tril_ind = jnp.nonzero(tril_ind, size=int((senders.shape[-1]-nodes.shape[1])/2+nodes.shape[1]), fill_value=jnp.nan)[0].astype(jnp.int32)
+    edges_upd = edges.at[tril_ind].get()
+    receivers_upd = receivers.at[tril_ind].get()
+    senders_upd = senders.at[tril_ind].get()
+    return nodes, edges_upd, receivers_upd, senders_upd
     
 def batch_indices(key, arr, batch_size):
     # TODO

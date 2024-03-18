@@ -8,7 +8,7 @@ import jax.nn as jnn
 from jax.ops import segment_sum
 import equinox as eqx
 
-from utils import graph_to_low_tri_mat
+from utils import graph_to_low_tri_mat_sparse, graph_tril, graph_to_low_tri_mat
 from data import bi_direc_edge_avg
 
 class PrecNet(eqx.Module):
@@ -31,7 +31,9 @@ class PrecNet(eqx.Module):
         nodes, edges, receivers, senders = self.MessagePass(nodes, edges, receivers, senders)
         edges = bi_direc_edge_avg(edges, bi_edges_indx)
         edges = self.EdgeDecoder(edges)
-        low_tri = graph_to_low_tri_mat(nodes, jnp.squeeze(edges), receivers, senders)
+        nodes, edges, receivers, senders = graph_tril(nodes, jnp.squeeze(edges), receivers, senders)
+        low_tri = graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders)
+#         low_tri = graph_to_low_tri_mat(nodes, jnp.squeeze(edges), receivers, senders)
         return low_tri
     
     
@@ -97,7 +99,7 @@ class MessagePassing(eqx.Module):
         # Find non-main-diagonal edges
         non_diag_edge_idx = jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]]))
         non_diag_edge_idx = jnp.nonzero(non_diag_edge_idx, size=senders.shape[0]-nodes.shape[1], fill_value=jnp.nan)[0].astype(jnp.int32)
-
+        
         feat_in = jnp.concatenate([
             edges[:, non_diag_edge_idx],
             sent_attributes[:, non_diag_edge_idx],
@@ -105,4 +107,5 @@ class MessagePassing(eqx.Module):
         ], axis=0)
         edges_upd = self.update_edge_fn(feat_in)
         edges = edges.at[:, non_diag_edge_idx].set(edges_upd)
+#         edges = self.update_edge_fn(jnp.concatenate([edges, sent_attributes, received_attributes], axis=0))
         return edges
