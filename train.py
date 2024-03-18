@@ -1,4 +1,5 @@
 from jax import vmap, lax
+from jax.experimental import sparse as jsparse
 import jax.numpy as jnp
 import equinox as eqx
 
@@ -18,6 +19,14 @@ def compute_loss_LLT(model, X, y):
     L = vmap(model, in_axes=(0, 0, 0, 0, 0), out_axes=(0))(X[0], X[1], X[2], X[3], X[4])
     loss = vmap(LLT_loss, in_axes=(0, 0, 0), out_axes=(0))(L, X[5], X[6])
     return jnp.sum(loss)
+
+def compute_loss_LLT_with_cond(model, X, y):
+    L = vmap(model, in_axes=(0, 0, 0, 0, 0), out_axes=(0))(X[0], X[1], X[2], X[3], X[4])
+    loss = vmap(LLT_loss, in_axes=(0, 0, 0), out_axes=(0))(L, X[5], X[6])
+#     def cond_LLT(L): return jnp.linalg.cond(L @ L.T)
+#     cond_LLT = jsparse.sparsify(vmap(lambda L: jnp.linalg.cond(L @ L.T), in_axes=(0), out_axes=(0)))(L)
+    cond_LLT = vmap(lambda L: jnp.linalg.cond(L @ L.T), in_axes=(0), out_axes=(0))(L.todense())
+    return jnp.sum(loss), jnp.mean(cond_LLT)
 
 def compute_loss_mse(model, X, y):
     '''Graph was made out of lhs A.
@@ -56,15 +65,16 @@ def train(model, data, train_config, compute_loss):
         return loss, model, opt_state
     
     def make_val_step(model, X, y):
-        loss = compute_loss(model, X, y)
-        return loss
+#         loss = compute_loss(model, X, y)
+        loss, cond = compute_loss_LLT_with_cond(model, X, y)
+        return loss, cond
     
     def train_body(carry, x):
         model, opt_state = carry
         loss_train, model, opt_state = make_step(model, X_train, y_train, opt_state)
-        loss_test = make_val_step(model, X_test, y_test)
+        loss_test, cond_test = make_val_step(model, X_test, y_test)
         carry = (model, opt_state)
-        return carry, [loss_train, loss_test]
+        return carry, [loss_train, loss_test, cond_test]
     
     carry_init = (model, opt_state)
     (model, _), losses = lax.scan(train_body, carry_init, None, length=train_config['epoch_num'])
