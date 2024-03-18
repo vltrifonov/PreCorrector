@@ -1,6 +1,6 @@
 from typing import Callable
 
-from jax import random
+from jax import random, vmap
 import jax.numpy as jnp
 import jax.tree_util as tree
 import jax.nn as jnn
@@ -79,11 +79,22 @@ class MessagePassing(eqx.Module):
     # CHECK
     def _update_nodes(self, nodes, edges, receivers, senders):
         sum_n_node = tree.tree_leaves(nodes)[0].shape[1]
-        sent_attributes = tree.tree_map(lambda e: self.aggregate_edges_for_nodes_fn(e, senders, sum_n_node), jnp.einsum('ij->ji', edges))
-        sent_attributes = jnp.einsum('ij->ji', sent_attributes)
+#         sent_attributes = tree.tree_map(lambda e: self.aggregate_edges_for_nodes_fn(e, senders, sum_n_node), jnp.einsum('ij->ji', edges))
+#         sent_attributes = jnp.einsum('ij->ji', sent_attributes)
+#         sent_attributes = vmap(tree.tree_map(lambda e: self.aggregate_edges_for_nodes_fn(e, senders, sum_n_node)),
+#                                in_axes=(0), out_axes=(0))(edges)
+        sent_attributes = vmap(
+            tree.tree_map, 
+            in_axes=(None, 0), out_axes=(0)
+        )(lambda e: self.aggregate_edges_for_nodes_fn(e, senders, sum_n_node), edges)
+    
+#         received_attributes = tree.tree_map(lambda e: self.aggregate_edges_for_nodes_fn(e, receivers, sum_n_node), jnp.einsum('ij->ji', edges))
+#         received_attributes = jnp.einsum('ij->ji', received_attributes)
+        received_attributes = vmap(
+            tree.tree_map, 
+            in_axes=(None, 0), out_axes=(0)
+        )(lambda e: self.aggregate_edges_for_nodes_fn(e, receivers, sum_n_node), edges)
         
-        received_attributes = tree.tree_map(lambda e: self.aggregate_edges_for_nodes_fn(e, receivers, sum_n_node), jnp.einsum('ij->ji', edges))
-        received_attributes = jnp.einsum('ij->ji', received_attributes)
         nodes = self.update_node_fn(jnp.concatenate([nodes, sent_attributes, received_attributes], axis=0))
         return nodes
     
