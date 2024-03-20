@@ -1,3 +1,4 @@
+from functools import partial
 from jax import vmap, lax, jit, random
 from jax.experimental import sparse as jsparse
 import jax.numpy as jnp
@@ -21,12 +22,15 @@ def compute_loss_Notay(model, X, y):
          X[7] - lhs A.
          X[8] - key for random.normal residuals r.
     '''  
-    L = vmap(model, in_axes=(0, 0, 0, 0, 0), out_axes=(0))(X[0], X[1], X[2], X[3], X[4])
-    Linv = vinv(L.todense())
+    L = vmap(model, in_axes=(0, 0, 0, 0, 0), out_axes=(0))(X[0], X[1], X[2], X[3], X[4]).todense()
+    y = vmap(partial(lax.linalg.triangular_solve, left_side=True, lower=True), in_axes=(0, 0), out_axes=(0))(L, X[6])
+    Pinv_res = vmap(partial(lax.linalg.triangular_solve, transpose_a=True, left_side=True, lower=True), in_axes=(0, 0), out_axes=(0))(L, y)  
+#     Linv = vinv(L.todense())
+
     A = X[7].todense()
-    Ainv = vinv(A)    
+    Ainv = vinv(A)
 #     res = vmap(random.normal, in_axes=(0, None), out_axes=(0))(X[8], X[6].shape[-1:])
-    loss = vmap(Notay_loss, in_axes=(0, 0, 0, 0), out_axes=(0))(Linv, A, Ainv, X[6])
+    loss = vmap(Notay_loss, in_axes=(0, 0, 0, 0), out_axes=(0))(Pinv_res, A, Ainv, X[6])
     return jnp.mean(loss)
     
 def compute_loss_LLT(model, X, y):
@@ -53,15 +57,18 @@ def compute_loss_LLT_with_cond(model, X, y):
     return jnp.sum(loss), jnp.mean(cond_LLT)
 
 def compute_loss_Notay_with_cond(model, X, y):
-    L = vmap(model, in_axes=(0, 0, 0, 0, 0), out_axes=(0))(X[0], X[1], X[2], X[3], X[4])
-    Linv = vinv(L.todense())
+    L = vmap(model, in_axes=(0, 0, 0, 0, 0), out_axes=(0))(X[0], X[1], X[2], X[3], X[4]).todense()
+    y = vmap(partial(lax.linalg.triangular_solve, left_side=True, lower=True), in_axes=(0, 0), out_axes=(0))(L, X[6])
+    Pinv_res = vmap(partial(lax.linalg.triangular_solve, transpose_a=True, left_side=True, lower=True), in_axes=(0, 0), out_axes=(0))(L, y)  
+#     Linv = vinv(L.todense())
+
     A = X[7].todense()
-    Ainv = vinv(A)    
+    Ainv = vinv(A)
 #     res = vmap(random.normal, in_axes=(0, None), out_axes=(0))(X[8], X[6].shape[-1:])
-    loss = vmap(Notay_loss, in_axes=(0, 0, 0, 0), out_axes=(0))(Linv, A, Ainv, X[6])
+    loss = vmap(Notay_loss, in_axes=(0, 0, 0, 0), out_axes=(0))(Pinv_res, A, Ainv, X[6])
     
-    cond_LLT = vmap(lambda L: jnp.linalg.cond(L @ L.T), in_axes=(0), out_axes=(0))(L.todense())
-    return jnp.sum(loss), jnp.mean(cond_LLT)
+    cond_LLT = vmap(lambda L: jnp.linalg.cond(L @ L.T), in_axes=(0), out_axes=(0))(L)
+    return jnp.mean(loss), jnp.mean(cond_LLT)
 
 def compute_loss_mse(model, X, y):
     '''Graph was made out of lhs A.
@@ -100,8 +107,8 @@ def train(model, data, train_config, compute_loss):
         return loss, model, opt_state
     
     def make_val_step(model, X, y):
-        loss = compute_loss(model, X, y)
-        loss, cond = compute_loss_LLT_with_cond(model, X, y)
+#         loss = compute_loss(model, X, y)
+        loss, cond = compute_loss_Notay_with_cond(model, X, y)
         return loss, cond
 #         return loss
     
