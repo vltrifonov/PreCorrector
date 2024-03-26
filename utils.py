@@ -4,8 +4,6 @@ from jax import random
 from jax.experimental import sparse as jsparse
 import equinox as eqx
 
-from jax._src.lax import lax as lax_internal
-
 def graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders):
     "Lower traingle structure shoule be in the graph format."
     bcoo_ind = jnp.concatenate([senders[:, None], receivers[:, None]], axis=-1)

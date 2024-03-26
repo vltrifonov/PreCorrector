@@ -3,7 +3,7 @@ import itertools
 
 import numpy as np
 import jax.numpy as jnp
-from jax import random
+from jax import random, jit, vmap, scipy as jscipy
 from jax.experimental import sparse as jsparse
 from jax.lax import scan
 from jax import device_put
@@ -88,7 +88,8 @@ def get_exact_solution(A, rhs, grid, N_samples):
     ])#.reshape(N_samples, grid, grid)
     return u_exact
 
-
+# def get_exact_solution_bcoo(A, rhs):
+#     return vmap(jit(jscipy.sparse.linalg.bicgstab), in_axes=(0), out_axes=(0))(A, rhs)[0]
 
 # def spsolve_scan(carry, n):
 #     A, r = carry
