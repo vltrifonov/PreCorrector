@@ -2,7 +2,9 @@ from jax import lax
 import jax.numpy as jnp
 import equinox as eqx
 
-def train(model, data, train_config, compute_loss):
+from compute_loss_utils import compute_loss_Notay, compute_loss_Notay_with_cond, compute_loss_LLT, compute_loss_LLT_with_cond
+
+def train(model, data, train_config, loss_name):
     assert isinstance(train_config, dict)
     assert isinstance(data, tuple)
     assert len(data) == 4
@@ -14,6 +16,12 @@ def train(model, data, train_config, compute_loss):
     optim = train_config['optimizer'](train_config['lr'], **train_config['optim_params'])
     opt_state = optim.init(eqx.filter(model, eqx.is_array))
     
+    if loss_name == 'notay':
+        compute_loss = compute_loss_Notay
+    elif loss_name == 'llt':
+        compute_loss = compute_loss_LLT
+    else:
+        raise ValueError('Invalid loss name.')
     compute_loss_and_grads = eqx.filter_value_and_grad(compute_loss)
     
     def make_step(model, X, y, opt_state):
@@ -38,7 +46,7 @@ def train(model, data, train_config, compute_loss):
     return model, losses
 
 
-def train_with_cond(model, data, train_config, compute_loss, loss_name):
+def train_with_cond(model, data, train_config, loss_name):
     assert isinstance(train_config, dict)
     assert isinstance(data, tuple)
     assert len(data) == 4
@@ -50,13 +58,15 @@ def train_with_cond(model, data, train_config, compute_loss, loss_name):
     optim = train_config['optimizer'](train_config['lr'], **train_config['optim_params'])
     opt_state = optim.init(eqx.filter(model, eqx.is_array))
     
-    compute_loss_and_grads = eqx.filter_value_and_grad(compute_loss)
     if loss_name == 'notay':
+        compute_loss = compute_loss_Notay
         compute_loss_cond = compute_loss_Notay_with_cond 
     elif loss_name == 'llt':
+        compute_loss = compute_loss_LLT
         compute_loss_cond = compute_loss_LLT_with_cond
     else:
         raise ValueError('Invalid loss name.')
+    compute_loss_and_grads = eqx.filter_value_and_grad(compute_loss)
     
     def make_step(model, X, y, opt_state):
         loss, grads = compute_loss_and_grads(model, X, y)
