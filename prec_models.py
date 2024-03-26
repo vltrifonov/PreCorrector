@@ -12,7 +12,7 @@ class PrecNetLearnAll(eqx.Module):
     EdgeDecoder: eqx.Module
 
     def __init__(self, NodeEncoder, EdgeEncoder, MessagePass, EdgeDecoder):
-        super(PrecNet, self).__init__()
+        super(PrecNetLearnAll, self).__init__()
         self.NodeEncoder = NodeEncoder
         self.EdgeEncoder = EdgeEncoder
         self.MessagePass = MessagePass
@@ -37,7 +37,7 @@ class PrecNetCopyDiag(eqx.Module):
     EdgeDecoder: eqx.Module
 
     def __init__(self, NodeEncoder, EdgeEncoder, MessagePass, EdgeDecoder):
-        super(PrecNet, self).__init__()
+        super(PrecNetCopyDiag, self).__init__()
         self.NodeEncoder = NodeEncoder
         self.EdgeEncoder = EdgeEncoder
         self.MessagePass = MessagePass
@@ -70,7 +70,7 @@ class PrecNetCopyDiagSqrt(eqx.Module):
     EdgeDecoder: eqx.Module
 
     def __init__(self, NodeEncoder, EdgeEncoder, MessagePass, EdgeDecoder):
-        super(PrecNet, self).__init__()
+        super(PrecNetCopyDiagSqrt, self).__init__()
         self.NodeEncoder = NodeEncoder
         self.EdgeEncoder = EdgeEncoder
         self.MessagePass = MessagePass
@@ -103,7 +103,7 @@ class PrecNetRigidLDLT(eqx.Module):
     EdgeDecoder: eqx.Module
 
     def __init__(self, NodeEncoder, EdgeEncoder, MessagePass, EdgeDecoder):
-        super(PrecNet, self).__init__()
+        super(PrecNetRigidLDLT, self).__init__()
         self.NodeEncoder = NodeEncoder
         self.EdgeEncoder = EdgeEncoder
         self.MessagePass = MessagePass
@@ -139,7 +139,7 @@ class PrecNetLDLT(eqx.Module):
     EdgeDecoder: eqx.Module
 
     def __init__(self, NodeEncoder, EdgeEncoder, MessagePass, EdgeDecoder):
-        super(PrecNet, self).__init__()
+        super(PrecNetLDLT, self).__init__()
         self.NodeEncoder = NodeEncoder
         self.EdgeEncoder = EdgeEncoder
         self.MessagePass = MessagePass

@@ -37,7 +37,7 @@ class MessagePassingNoDiag(eqx.Module):
     mp_rounds: int = eqx.field(static=True)
         
     def __init__(self, update_edge_fn, update_node_fn, mp_rounds, aggregate_edges_for_nodes_fn=segment_sum):
-        super(MessagePassing, self).__init__()
+        super(MessagePassingNoDiag, self).__init__()
         self.update_edge_fn = update_edge_fn
         self.update_node_fn = update_node_fn
         self.aggregate_edges_for_nodes_fn = aggregate_edges_for_nodes_fn
@@ -90,7 +90,7 @@ class MessagePassingWithDiag(eqx.Module):
     mp_rounds: int = eqx.field(static=True)
         
     def __init__(self, update_edge_fn, update_node_fn, mp_rounds, aggregate_edges_for_nodes_fn=segment_sum):
-        super(MessagePassing, self).__init__()
+        super(MessagePassingWithDiag, self).__init__()
         self.update_edge_fn = update_edge_fn
         self.update_node_fn = update_node_fn
         self.aggregate_edges_for_nodes_fn = aggregate_edges_for_nodes_fn
