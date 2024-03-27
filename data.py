@@ -17,10 +17,10 @@ def dataset_LLT(grid, N_samples, seed):
     A, b = get_A_b(grid, N_samples, key)
     u_exact = get_exact_solution(A, b, grid, N_samples)  
     
-    nodes, edges, receivers, senders, n_node, n_edge = direc_graph_from_linear_system_sparse(A, b)
+    _, _, receivers, senders, n_node = direc_graph_from_linear_system_sparse(A, b)
     bi_edges = bi_direc_indx(receivers[0, ...], senders[0, ...], n_node[1]) 
-    bi_edges = jnp.repeat(bi_edges[None, ...], len(nodes), axis=0)
-    return A, b, u_exact, bi_edges, nodes, edges, receivers, senders
+    bi_edges = jnp.repeat(bi_edges[None, ...], n_node[0], axis=0)
+    return A, b, u_exact, bi_edges
 
 def dataset_Notay(**kwargs):
     pass
@@ -33,8 +33,8 @@ def direc_graph_from_linear_system_sparse(A, b):
     senders, receivers = A.indices[..., 0], A.indices[..., 1]
     edges = A.data
     n_node = jnp.array([nodes.shape[0], nodes.shape[1]])
-    n_edge = jnp.array([senders.shape[0], senders.shape[1]])
-    return nodes, edges, receivers, senders, n_node, n_edge
+#     n_edge = jnp.array([senders.shape[0], senders.shape[1]])
+    return nodes, edges, receivers, senders, n_node
 
 def bi_direc_indx(receivers, senders, n_node):
     '''Returns indices of edges which corresponds to bi-direcional connetions.'''

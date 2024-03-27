@@ -1,3 +1,5 @@
+from typing import Iterable
+
 from jax import lax
 import jax.numpy as jnp
 import equinox as eqx
@@ -6,12 +8,12 @@ from compute_loss_utils import compute_loss_Notay, compute_loss_Notay_with_cond,
 
 def train(model, data, train_config, loss_name):
     assert isinstance(train_config, dict)
-    assert isinstance(data, tuple)
+    assert isinstance(data, Iterable)
     assert len(data) == 4
     
     X_train, X_test, y_train, y_test = data
-    assert isinstance(X_train, tuple)
-    assert isinstance(X_test, tuple)
+    assert isinstance(X_train, Iterable)
+    assert isinstance(X_test, Iterable)
     
     optim = train_config['optimizer'](train_config['lr'], **train_config['optim_params'])
     opt_state = optim.init(eqx.filter(model, eqx.is_array))
@@ -48,12 +50,12 @@ def train(model, data, train_config, loss_name):
 
 def train_with_cond(model, data, train_config, loss_name):
     assert isinstance(train_config, dict)
-    assert isinstance(data, tuple)
+    assert isinstance(data, Iterable)
     assert len(data) == 4
     
     X_train, X_test, y_train, y_test = data
-    assert isinstance(X_train, tuple)
-    assert isinstance(X_test, tuple)
+    assert isinstance(X_train, Iterable)
+    assert isinstance(X_test, Iterable)
     
     optim = train_config['optimizer'](train_config['lr'], **train_config['optim_params'])
     opt_state = optim.init(eqx.filter(model, eqx.is_array))
