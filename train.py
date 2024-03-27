@@ -20,8 +20,10 @@ def train(model, data, train_config, loss_name, with_cond):
     
     if loss_name == 'notay':
         compute_loss = compute_loss_Notay
+        compute_loss_cond = compute_loss_Notay_with_cond 
     elif loss_name == 'llt':
         compute_loss = compute_loss_LLT
+        compute_loss_cond = compute_loss_LLT_with_cond
     else:
         raise ValueError('Invalid loss name.')
     compute_loss_and_grads = eqx.filter_value_and_grad(compute_loss)
@@ -34,23 +36,27 @@ def train(model, data, train_config, loss_name, with_cond):
     
     def make_val_step(model, X, y):
         loss = compute_loss(model, X, y)
-        return loss   
+        return loss 
+    
+    def make_val_step_cond(model, X, y):
+        loss, cond = compute_loss_cond(model, X, y)
+        return loss, cond
     
     def train_body(carry, x):
         model, opt_state = carry
-        loss_train, model, opt_state = make_step(model, X_train, y_train, opt_state)
         loss_test = make_val_step(model, X_test, y_test)
+        loss_train, model, opt_state = make_step(model, X_train, y_train, opt_state)
         carry = (model, opt_state)
         return carry, [loss_train, loss_test]
     
-    def train_body_with_cond(carry, x):
+    def train_body_cond(carry, x):
         model, opt_state = carry
+        loss_test, cond_test = make_val_step_cond(model, X_test, y_test)
         loss_train, model, opt_state = make_step(model, X_train, y_train, opt_state)
-        loss_test, cond_test = make_val_step(model, X_test, y_test)
         carry = (model, opt_state)
         return carry, [loss_train, loss_test, cond_test] 
     
-    train_body_loop = train_body_with_cond if with_cond else train_body
+    train_body_loop = train_body_cond if with_cond else train_body
     carry_init = (model, opt_state)
     (model, _), losses = lax.scan(train_body_loop, carry_init, None, length=train_config['epoch_num'])
     return model, losses
