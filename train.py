@@ -38,8 +38,8 @@ def train(model, data, train_config, loss_name):
     
     def train_body(carry, x):
         model, opt_state = carry
-        loss_test = make_val_step(model, X_test, y_test)
         loss_train, model, opt_state = make_step(model, X_train, y_train, opt_state)
+        loss_test = make_val_step(model, X_test, y_test)
         carry = (model, opt_state)
         return carry, [loss_train, loss_test]
    
@@ -82,8 +82,8 @@ def train_with_cond(model, data, train_config, loss_name):
     
     def train_body(carry, x):
         model, opt_state = carry
-        loss_test, cond_test = make_val_step(model, X_test, y_test)
         loss_train, model, opt_state = make_step(model, X_train, y_train, opt_state)
+        loss_test, cond_test = make_val_step(model, X_test, y_test)
         carry = (model, opt_state)
         return carry, [loss_train, loss_test, cond_test]
    

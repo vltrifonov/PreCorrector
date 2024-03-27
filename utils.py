@@ -1,6 +1,6 @@
 import jax
 import jax.numpy as jnp
-from jax import random
+from jax import random, vmap
 from jax.experimental import sparse as jsparse
 import equinox as eqx
 
@@ -37,6 +37,18 @@ def batch_indices(key, arr, batch_size):
 def params_count(model):
     return sum([2*i.size if i.dtype == jnp.complex128 else i.size for i in jax.tree_util.tree_leaves(eqx.filter(model, eqx.is_array))])
 
+def asses_cond(A, L):
+    cond_A = vmap(lambda A: jnp.linalg.cond(A), in_axes=(0), out_axes=(0))(A.todense())
+    cond_LLT = vmap(lambda L: jnp.linalg.cond(L @ L.T), in_axes=(0), out_axes=(0))(L.todense())
+    return jnp.mean(cond_A), jnp.mean(cond_LLT)
+
+def iter_per_residual(cg_res, thresholds=[1e-3, 1e-6, 1e-12]):
+    iter_per_res = {}
+    for k in thresholds:
+        try: val = jnp.where(jnp.linalg.norm(cg_res, axis=1).mean(0) <= k)[0][0].item()
+        except: val = jnp.nan
+        iter_per_res[k] = val
+    return iter_per_res
 
 
 # def get_mi_fcg(i, m_max):
