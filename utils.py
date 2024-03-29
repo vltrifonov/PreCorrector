@@ -3,6 +3,7 @@ import jax.numpy as jnp
 from jax import random, vmap
 from jax.experimental import sparse as jsparse
 import equinox as eqx
+import numpy as np
 
 def graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders):
     "Lower traingle structure shoule be in the graph format."
@@ -24,15 +25,13 @@ def graph_tril(nodes, edges, receivers, senders):
     receivers_upd = receivers.at[tril_ind].get()
     senders_upd = senders.at[tril_ind].get()
     return nodes, edges_upd, receivers_upd, senders_upd
-    
+            
 def batch_indices(key, arr, batch_size):
-    # TODO
-#     n_samples = len(arr)
-#     list_of_indices = jnp.arange(n_samples, dtype=jnp.int64)
-#     bacth_num = n_samples // batch_size
-#     batch_indices = random.choice(key, list_of_indices, shape=[bacth_num, batch_size])
-#     return batch_indices, bacth_num
-    pass
+    dataset_size = len(arr)
+    list_of_indices = jnp.arange(dataset_size, dtype=jnp.int64)
+    bacth_num = dataset_size // batch_size
+    batch_indices = random.choice(key, list_of_indices, shape=[bacth_num, batch_size])
+    return batch_indices, bacth_num
 
 def params_count(model):
     return sum([2*i.size if i.dtype == jnp.complex128 else i.size for i in jax.tree_util.tree_leaves(eqx.filter(model, eqx.is_array))])
