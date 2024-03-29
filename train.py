@@ -5,6 +5,8 @@ import jax.numpy as jnp
 import equinox as eqx
 
 from compute_loss_utils import compute_loss_Notay, compute_loss_Notay_with_cond, compute_loss_LLT, compute_loss_LLT_with_cond
+from compute_loss_utils import compute_loss_rigidLDLT, compute_loss_rigidLDLT_with_cond
+
 
 def train(model, data, train_config, loss_name, with_cond):
     assert isinstance(train_config, dict)
@@ -24,6 +26,9 @@ def train(model, data, train_config, loss_name, with_cond):
     elif loss_name == 'llt':
         compute_loss = compute_loss_LLT
         compute_loss_cond = compute_loss_LLT_with_cond
+    elif loss_name == 'r-ldlt':
+        compute_loss = compute_loss_rigidLDLT
+        compute_loss_cond = compute_loss_rigidLDLT_with_cond
     else:
         raise ValueError('Invalid loss name.')
     compute_loss_and_grads = eqx.filter_value_and_grad(compute_loss)
@@ -44,15 +49,15 @@ def train(model, data, train_config, loss_name, with_cond):
     
     def train_body(carry, x):
         model, opt_state = carry
-        loss_test = make_val_step(model, X_test, y_test)
         loss_train, model, opt_state = make_step(model, X_train, y_train, opt_state)
+        loss_test = make_val_step(model, X_test, y_test)
         carry = (model, opt_state)
         return carry, [loss_train, loss_test]
     
     def train_body_cond(carry, x):
         model, opt_state = carry
-        loss_test, cond_test = make_val_step_cond(model, X_test, y_test)
         loss_train, model, opt_state = make_step(model, X_train, y_train, opt_state)
+        loss_test, cond_test = make_val_step_cond(model, X_test, y_test)
         carry = (model, opt_state)
         return carry, [loss_train, loss_test, cond_test] 
     
