@@ -12,7 +12,6 @@ def apply_Jacobi(model, res, nodes, edges, receivers, senders, bi_edges_indx, A)
     return omega
 
 def apply_LDLT(res, L, D, *args):
-    # TODO
     y, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(L, res)
     L_T = jsparse.bcoo_transpose(L, permutation=[0, 2, 1])
     DL_T = vmap(jsparse.sparsify(lambda A, B: A @ B), in_axes=(0, 0), out_axes=(0))(D, L_T)
@@ -22,6 +21,11 @@ def apply_LDLT(res, L, D, *args):
 def apply_LLT(res, L, *args):
     y, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(L, res)
     omega, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(jsparse.bcoo_transpose(L, permutation=[0, 2, 1]), y)
+    return omega
+
+def apply_LU(res, L, U, *args):
+    y, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(L, res)
+    omega, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(U, y)
     return omega
 
 def ConjGrad(A, rhs, N_iter, prec_func=None, eps=1e-30, seed=42):

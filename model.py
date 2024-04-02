@@ -87,17 +87,19 @@ class MessagePassing(eqx.Module):
     
     def _update_nodes(self, nodes, edges, receivers, senders):
         sum_n_node = tree.tree_leaves(nodes)[0].shape[1]
+        edges_by_receivers = edges * nodes[:, receivers] # Elemet-wise e_{i,j,t}v_{j,t}
+
         sent_attributes = vmap(
-            tree.tree_map, 
+            tree.tree_map,
             in_axes=(None, 0), out_axes=(0)
-        )(lambda e: self.aggregate_edges_for_nodes_fn(e, senders, sum_n_node), edges)
+        )(lambda e: self.aggregate_edges_for_nodes_fn(e, senders, sum_n_node), edges_by_receivers)# edges)
     
-        received_attributes = vmap(
-            tree.tree_map, 
-            in_axes=(None, 0), out_axes=(0)
-        )(lambda e: self.aggregate_edges_for_nodes_fn(e, receivers, sum_n_node), edges)
+#         received_attributes = vmap(
+#             tree.tree_map, 
+#             in_axes=(None, 0), out_axes=(0)
+#         )(lambda e: self.aggregate_edges_for_nodes_fn(e, receivers, sum_n_node), edges)
         
-        nodes = self.update_node_fn(jnp.concatenate([nodes, sent_attributes, received_attributes], axis=0))
+        nodes = self.update_node_fn(jnp.concatenate([nodes, sent_attributes], axis=0)) #jnp.concatenate([nodes, sent_attributes, received_attributes], axis=0))
         return nodes
     
     def _update_edges(self, nodes, edges, receivers, senders):

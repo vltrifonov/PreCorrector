@@ -65,18 +65,17 @@ def train(model, data, train_config, loss_name, with_cond, key=42):
     def train_body_cond(carry, x):
         model, opt_state = carry
         key = random.PRNGKey(x)
-        b = batch_indices(key, X_train, bacth_size)
+        b, _ = batch_indices(key, X_train[0], bacth_size)
         loss_train = jnp.zeros(len(b))
         
         for i in range(len(b)):
             batched_X_train = [arr[b[i, :], ...] for arr in X_train]
-            loss_batch, model, opt_state = make_step(model, X_train[b[i, :], ...], y_train, opt_state)
+            loss_batch, model, opt_state = make_step(model, batched_X_train, y_train, opt_state)
             loss_train = loss_train.at[i].set(loss_batch)
-        loss_train = jnp.mean(loss_train)
         
         loss_test, cond_test = make_val_step_cond(model, X_test, y_test)
         carry = (model, opt_state)
-        return carry, [loss_train, loss_test, cond_test] 
+        return carry, [jnp.mean(loss_train), loss_test, cond_test] 
     
     train_body_loop = train_body_cond if with_cond else train_body
     carry_init = (model, opt_state)
