@@ -1,5 +1,6 @@
 import sys 
 import itertools
+from functools import partial
 
 import numpy as np
 import jax.numpy as jnp
@@ -9,17 +10,33 @@ from jax.lax import scan
 from jax import device_put
 
 from solvers import FD_2D
+from conj_grad import ConjGrad
 
 # Dataset
-def dataset_Poisson2D_finite_diff(grid, N_samples, seed, rhs_distr):
+def dataset_Poisson2D_finite_diff(grid, N_samples, seed, rhs_distr, random_rhs=False):
     key = random.PRNGKey(seed)
-    A, b = get_A_b(grid, N_samples, key, rhs_distr)
+    A, b = get_A_b(grid, N_samples, key, rhs_distr, random_rhs=random_rhs)
     u_exact = get_exact_solution(A, b, grid, N_samples)  
     
     _, _, receivers, senders, n_node = direc_graph_from_linear_system_sparse(A, b)
     bi_edges = bi_direc_indx(receivers[0, ...], senders[0, ...], n_node[1]) 
     bi_edges = jnp.repeat(bi_edges[None, ...], n_node[0], axis=0)
     return A, b, u_exact, bi_edges
+
+def dataset_Krylov(grid, N_samples, seed, rhs_distr, cg_repeats, random_rhs=False):
+    f_repeat = partial(jnp.repeat, repeats=cg_repeats, axis=0)
+    A, b, u_exact, bi_edges = dataset_Poisson2D_finite_diff(grid, N_samples, seed, rhs_distr, random_rhs)
+    _, res = ConjGrad(A, b, N_iter=cg_repeats-1, prec_func=None, seed=42)              # res.shape = (batch, grid, cg_iteration)
+    res = jnp.concatenate(res, axis=1).T
+    
+    A = jsparse.sparsify(f_repeat)(A)
+    b = f_repeat(b)
+    u_exact = f_repeat(u_exact)
+    bi_edges = f_repeat(bi_edges)
+#     del A, b, u_exact, bi_edges
+#     A, b, u_exact, bi_edges = dataset_Poisson2D_finite_diff(grid, N_samples, seed, rhs_distr, random_rhs, repets=cg_repeats)
+    return A, b, u_exact, bi_edges, res
+
 
 
 # Graphs
@@ -66,13 +83,15 @@ def get_functions(key, n1, n2, alpha):
     rhs = lambda x, y, c=c_[0], alpha=alpha: random_polynomial_2D(x, y, c, alpha)
     return rhs
 
-def get_A_b(grid, N_samples, key, rhs_distr):
+def get_A_b(grid, N_samples, key, rhs_distr, random_rhs):
     keys = random.split(key, N_samples)
     A, rhs = [], []
     n1, n2, alpha = rhs_distr
+    rhs_func = lambda rhs, key: random.normal(key=key, shape=rhs.shape) if random_rhs else rhs
     
     for key in keys:
         rhs_sample, A_sample = FD_2D(grid, [lambda x, y: 1, get_functions(key, n1, n2, alpha)])
+        rhs_sample = rhs_func(rhs_sample, key)
         A.append(A_sample.reshape(1, grid**2, -1))
         rhs.append(rhs_sample)
     A = device_put(jsparse.bcoo_concatenate(A, dimension=0))
