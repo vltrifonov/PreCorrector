@@ -20,13 +20,13 @@ def compute_loss_LLT(model, X, y):
     loss = vmap(LLT_loss, in_axes=(0, 0, 0), out_axes=(0))(L, X[3], X[1])
     return jnp.sum(loss)
 
-def compute_loss_LLT_with_cond(model, X, y):
+def compute_loss_LLT_with_cond(model, X, y, repeat_step):
     nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(X[0], X[1])#X[3])
     L = vmap(model, in_axes=(0, 0, 0, 0, 0), out_axes=(0))(nodes, edges, receivers, senders, X[2])
     loss = vmap(LLT_loss, in_axes=(0, 0, 0), out_axes=(0))(L, X[3], X[1])
 
-    P = vmap(jsparse.sparsify(lambda L: (L @ L.T)), in_axes=(0), out_axes=(0))(L)
-    cond_Pinv_A = vmap(lambda P_, A: jnp.linalg.cond(jnp.linalg.inv(P_) @ A), in_axes=(0, 0), out_axes=(0))(P.todense(), X[0])
+    P = vmap(jsparse.sparsify(lambda L: (L @ L.T)), in_axes=(0), out_axes=(0))(L[::repeat_step, ...])
+    cond_Pinv_A = vmap(lambda P_, A: jnp.linalg.cond(jnp.linalg.inv(P_) @ A), in_axes=(0, 0), out_axes=(0))(P.todense(), X[0][::repeat_step, ...])
     return jnp.sum(loss), jnp.mean(cond_Pinv_A)
 
 # Notay
@@ -39,26 +39,26 @@ def compute_loss_Notay(model, X, y):
          X[3] - solution of linear system x.
          X[4] - residuals from CG.
      '''
-    nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(X[0], X[1])#X[3])
+    nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(X[0], X[1])
     L = vmap(model, in_axes=(0, 0, 0, 0, 0), out_axes=(0))(nodes, edges, receivers, senders, X[2])
-    y, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(L, X[1])#X[4])
+    y, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(L, X[4])#X[1])
     Pinv_res, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(jsparse.bcoo_transpose(L, permutation=[0, 2, 1]), y)
     A = X[0].todense()
     Ainv = vmap(jnp.linalg.inv, in_axes=(0), out_axes=(0))(A)
-    loss = vmap(Notay_loss, in_axes=(0, 0, 0, 0), out_axes=(0))(Pinv_res, A, Ainv, X[1])#X[4])
+    loss = vmap(Notay_loss, in_axes=(0, 0, 0, 0), out_axes=(0))(Pinv_res, A, Ainv, X[4])#X[1])
     return jnp.mean(loss)
 
-def compute_loss_Notay_with_cond(model, X, y):
-    nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(X[0], X[1])#X[3])
+def compute_loss_Notay_with_cond(model, X, y, repeat_step):
+    nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(X[0], X[1])
     L = vmap(model, in_axes=(0, 0, 0, 0, 0), out_axes=(0))(nodes, edges, receivers, senders, X[2])
-    y, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(L, X[1])#X[4])
+    y, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(L, X[4])#X[1])
     Pinv_res, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(jsparse.bcoo_transpose(L, permutation=[0, 2, 1]), y)
     A = X[0].todense()
     Ainv = vmap(jnp.linalg.inv, in_axes=(0), out_axes=(0))(A)
-    loss = vmap(Notay_loss, in_axes=(0, 0, 0, 0), out_axes=(0))(Pinv_res, A, Ainv, X[1])#X[4])
+    loss = vmap(Notay_loss, in_axes=(0, 0, 0, 0), out_axes=(0))(Pinv_res, A, Ainv, X[4])#X[1])
     
-    P = vmap(jsparse.sparsify(lambda L: (L @ L.T)), in_axes=(0), out_axes=(0))(L)
-    cond_Pinv_A = vmap(lambda P_, A: jnp.linalg.cond(jnp.linalg.inv(P_) @ A), in_axes=(0), out_axes=(0))(P.todense(), X[0])
+    P = vmap(jsparse.sparsify(lambda L: (L @ L.T)), in_axes=(0), out_axes=(0))(L[::repeat_step, ...])
+    cond_Pinv_A = vmap(lambda P_, A: jnp.linalg.cond(jnp.linalg.inv(P_.todense()) @ A), in_axes=(0), out_axes=(0))(P, X[0][::repeat_step, ...])
     return jnp.mean(loss), jnp.mean(cond_Pinv_A)
 
 # Rigid LDLT

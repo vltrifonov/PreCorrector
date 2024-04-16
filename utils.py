@@ -28,18 +28,16 @@ def graph_tril(nodes, edges, receivers, senders):
             
 def batch_indices(key, arr, batch_size):
     dataset_size = len(arr)
-    list_of_indices = jnp.arange(dataset_size, dtype=jnp.int64)
-    bacth_num = dataset_size // batch_size
-    batch_indices = random.choice(key, list_of_indices, shape=[bacth_num, batch_size])
-    return batch_indices, bacth_num
+    batch_indices = random.choice(key, jnp.arange(dataset_size, dtype=jnp.int64), shape=[dataset_size // batch_size, batch_size])
+    return batch_indices
 
 def params_count(model):
     return sum([2*i.size if i.dtype == jnp.complex128 else i.size for i in jax.tree_util.tree_leaves(eqx.filter(model, eqx.is_array))])
 
 def asses_cond(A, L):
-    cond_A = vmap(lambda A: jnp.linalg.cond(A), in_axes=(0), out_axes=(0))(A.todense())
+    cond_A = vmap(lambda A: jnp.linalg.cond(A.todense()), in_axes=(0), out_axes=(0))(A)
     P = vmap(jsparse.sparsify(lambda L: (L @ L.T)), in_axes=(0), out_axes=(0))(L)
-    cond_Pinv_A = vmap(lambda P_, A: jnp.linalg.cond(jnp.linalg.inv(P_) @ A), in_axes=(0, 0), out_axes=(0))(P.todense(), A)
+    cond_Pinv_A = vmap(lambda P_, A: jnp.linalg.cond(jnp.linalg.inv(P_.todense()) @ A), in_axes=(0, 0), out_axes=(0))(P, A)
     return jnp.mean(cond_A), jnp.mean(cond_Pinv_A)
 
 def iter_per_residual(cg_res, thresholds=[1e-3, 1e-6, 1e-12]):
