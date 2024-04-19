@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import equinox as eqx
 
 from compute_loss_utils import compute_loss_Notay, compute_loss_Notay_with_cond, compute_loss_LLT, compute_loss_LLT_with_cond
-from compute_loss_utils import compute_loss_rigidLDLT, compute_loss_rigidLDLT_with_cond
+# from compute_loss_utils import compute_loss_rigidLDLT, compute_loss_rigidLDLT_with_cond, 
 from utils import batch_indices
 
 def train(model, data, train_config, loss_name, with_cond, key=42, repeat_step=1):

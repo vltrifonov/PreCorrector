@@ -13,30 +13,28 @@ from solvers import FD_2D
 from conj_grad import ConjGrad
 
 # Dataset
-def dataset_Poisson2D_finite_diff(grid, N_samples, seed, rhs_distr, random_rhs=False):
+def dataset_FD(grid, N_samples, seed, rhs_distr, rhs_offset, k_distr, k_offset):
     key = random.PRNGKey(seed)
-    A, b = get_A_b(grid, N_samples, key, rhs_distr, random_rhs=random_rhs)
-    u_exact = get_exact_solution(A, b, grid, N_samples)  
+    A, b = get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset)
+    u_exact = get_exact_solution(A, b, grid, N_samples)
     
     _, _, receivers, senders, n_node = direc_graph_from_linear_system_sparse(A, b)
     bi_edges = bi_direc_indx(receivers[0, ...], senders[0, ...], n_node[1]) 
     bi_edges = jnp.repeat(bi_edges[None, ...], n_node[0], axis=0)
     return A, b, u_exact, bi_edges
 
-def dataset_Krylov(grid, N_samples, seed, rhs_distr, cg_repeats, random_rhs=False):
+def dataset_Krylov(grid, N_samples, seed, rhs_distr, rhs_offset, k_distr, k_offset, cg_repeats):
     f_repeat = partial(jnp.repeat, repeats=cg_repeats, axis=0)
-    A, b, u_exact, bi_edges = dataset_Poisson2D_finite_diff(grid, N_samples, seed, rhs_distr, random_rhs)
-    _, res = ConjGrad(A, b, N_iter=cg_repeats-1, prec_func=None, seed=42)              # res.shape = (batch, grid, cg_iteration)
+    A, b, u_exact, bi_edges = dataset_FD(grid, N_samples, seed, rhs_distr, rhs_offset, k_distr, k_offset)
+    u_approx, res = ConjGrad(A, b, N_iter=cg_repeats-1, prec_func=None, seed=42)              # res.shape = (batch, grid, cg_iteration)
+    u_approx = jnp.concatenate(u_approx, axis=1).T
     res = jnp.concatenate(res, axis=1).T
-    
+        
     A = jsparse.sparsify(f_repeat)(A)
     b = f_repeat(b)
     u_exact = f_repeat(u_exact)
     bi_edges = f_repeat(bi_edges)
-#     del A, b, u_exact, bi_edges
-#     A, b, u_exact, bi_edges = dataset_Poisson2D_finite_diff(grid, N_samples, seed, rhs_distr, random_rhs, repets=cg_repeats)
-    return A, b, u_exact, bi_edges, res
-
+    return A, b, u_exact, bi_edges, res, u_approx
 
 
 # Graphs
@@ -75,23 +73,40 @@ def random_polynomial_2D(x, y, coeff, alpha):
     res = 0
     for i, j in itertools.product(range(coeff.shape[0]), repeat=2):
         res += coeff[i, j]*jnp.exp(2*jnp.pi*x*i*1j)*jnp.exp(2*jnp.pi*y*j*1j)/(1+i+j)**alpha
-    res = jnp.real(res)
-    return res
+    return jnp.real(res)
 
-def get_functions(key, n1, n2, alpha):
-    c_ = random.normal(key, (1, n1, n2), dtype=jnp.complex128)
-    rhs = lambda x, y, c=c_[0], alpha=alpha: random_polynomial_2D(x, y, c, alpha)
-    return rhs
+def get_trig_poly(key, n1, n2, alpha, offset):
+    c_ = random.normal(key, (n1, n2), dtype=jnp.complex128)
+    return lambda x, y, c=c_, alpha=alpha, offset=offset: random_polynomial_2D(x, y, c, alpha) + offset
 
-def get_A_b(grid, N_samples, key, rhs_distr, random_rhs):
+def get_random_func(key, *args):
+    return lambda x, y, k=key: random.normal(key=k, shape=x.shape)
+
+def get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset):
     keys = random.split(key, N_samples)
     A, rhs = [], []
-    n1, n2, alpha = rhs_distr
-    rhs_func = lambda rhs, key: random.normal(key=key, shape=rhs.shape) if random_rhs else rhs
     
-    for key in keys:
-        rhs_sample, A_sample = FD_2D(grid, [lambda x, y: 1, get_functions(key, n1, n2, alpha)])
-        rhs_sample = rhs_func(rhs_sample, key)
+    if rhs_distr == 'random':
+        rhs_func = get_random_func
+    elif rhs_distr == 'laplace':
+        rhs_func = lambda k: lambda x, y: 0
+    elif isinstance(rhs_distr, list) and len(rhs_distr) == 3:
+        rhs_func = partial(get_trig_poly, n1=rhs_distr[0], n2=rhs_distr[1], alpha=rhs_distr[2], offset=rhs_offset)
+    else:
+        raise ValuerError('Invalid `rhs_distr`.')
+    
+    if k_distr == 'random':
+        k_func = get_random_func
+    elif k_distr == 'poisson':
+        k_func = lambda k: lambda x, y: 1
+    elif isinstance(k_distr, list) and len(k_distr) == 3:
+        k_func = partial(get_trig_poly, n1=k_distr[0], n2=k_distr[1], alpha=k_distr[2], offset=k_offset)
+    else:
+        raise ValuerError('Invalid `k_distr`.')
+        
+    for k_ in keys:
+        subk_ = random.split(k_, 2)
+        rhs_sample, A_sample = FD_2D(grid, [k_func(subk_[0]), rhs_func(subk_[1])])
         A.append(A_sample.reshape(1, grid**2, -1))
         rhs.append(rhs_sample)
     A = device_put(jsparse.bcoo_concatenate(A, dimension=0))

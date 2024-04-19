@@ -1,9 +1,13 @@
 import jax
 import jax.numpy as jnp
-from jax import random, vmap
+from jax import random, vmap, jit
 from jax.experimental import sparse as jsparse
+
 import equinox as eqx
 import numpy as np
+from functools import partial
+
+from conj_grad import ConjGrad, apply_LLT
 
 def graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders):
     "Lower traingle structure shoule be in the graph format."
@@ -47,3 +51,21 @@ def iter_per_residual(cg_res, thresholds=[1e-3, 1e-6, 1e-12]):
         except: val = jnp.nan
         iter_per_res[k] = val
     return iter_per_res
+
+@partial(jit, static_argnums=(3, 4))
+def asses_cond_with_res(A, b, P, start_epoch=5, end_epoch=10):
+    '''A, b, P are batched'''
+    cg = partial(ConjGrad, N_iter=end_epoch-1, prec_func=partial(apply_LLT, L=P), seed=42)
+    _, res = cg(A, b)
+    res = jnp.linalg.norm(res, axis=1)
+    
+    num = vmap(lambda r: jnp.power(2*r[start_epoch], 1/(end_epoch - start_epoch)) + jnp.power(r[-1], 1/(end_epoch - start_epoch)),
+               in_axes=(0),
+               out_axes=(0)
+              )(res)
+    denum = vmap(lambda r: jnp.power(2*r[start_epoch], 1/(end_epoch - start_epoch)) - jnp.power(r[-1], 1/(end_epoch - start_epoch)),
+                 in_axes=(0),
+                 out_axes=(0)
+                )(res)
+    out = vmap(lambda n, d: jnp.power(n/d, 2), in_axes=(0), out_axes=(0))(num, denum)
+    return out.mean()

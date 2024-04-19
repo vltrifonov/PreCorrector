@@ -13,8 +13,7 @@ def LLT_loss(L, x, b):
     return jnp.square(jnp.linalg.norm(L @ (L.T @ x) - b, ord=2))
 
 @jsparse.sparsify
-def Notay_loss(Pinv_res, A, Ainv, res):
-    Ainv_res = Ainv @ res
+def Notay_loss(Pinv_res, A, Ainv_res):
     num = Pinv_res - Ainv_res
     num = jnp.dot(num, jnp.dot(A, num))
     denom = jnp.dot(Ainv_res, jnp.dot(A, Ainv_res))

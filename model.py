@@ -127,7 +127,7 @@ class MessagePassingWithDot(MessagePassing):
     
     def _update_nodes(self, nodes, edges, receivers, senders):
         sum_n_node = tree.tree_leaves(nodes)[0].shape[1]
-        edges_by_receivers = vmap(jnp.dot, in_axes=(0, 0), out_axes=(0))(edges, nodes[:, receivers]) # Dot product e_{i,j,t}v_{j,t}
+        edges_by_receivers = vmap(jnp.dot, in_axes=(1, 1), out_axes=(0))(edges, nodes[:, receivers])[None, ...] # Dot product e_{i,j,t}v_{j,t}
 
         sent_attributes = vmap(
             tree.tree_map,

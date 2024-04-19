@@ -34,18 +34,19 @@ def ConjGrad(A, rhs, N_iter, prec_func=None, eps=1e-30, seed=42):
     samples = rhs.shape[0]
     n = rhs.shape[1]
 
-    X = random.normal(random.PRNGKey(seed), [samples, n])
+    X = jnp.zeros([samples, n, N_iter+1])
     R = jnp.zeros([samples, n, N_iter+1])
     Z = jnp.zeros([samples, n])
     P = jnp.zeros([samples, n])
 
-    R = R.at[:, :, 0].set(rhs - jsparse.bcoo_dot_general(A, X, dimension_numbers=((2,1), (0,0))))
+    X = X.at[:, :, 0].set(random.normal(random.PRNGKey(seed), [samples, n]))
+    R = R.at[:, :, 0].set(rhs - jsparse.bcoo_dot_general(A, X[:, :, 0], dimension_numbers=((2,1), (0,0))))
     Z = apply_prec(res=R[:, :, 0])
     P = Z
 
     w = jsparse.bcoo_dot_general(A, P, dimension_numbers=((2,1), (0,0)))
     alpha = jnp.einsum('bj, bj -> b', Z, R[:, :, 0]) / (jnp.einsum('bj, bj -> b', w, P) + eps)
-    X = X + jnp.einsum('bj, b -> bj', P, alpha)
+    X = X.at[:, :, 1].set(X[:, :, 0] + jnp.einsum('bj, b -> bj', P, alpha))
     R = R.at[:, :, 1].set(R[:, :, 0] - jnp.einsum('bj, b -> bj', w, alpha))
     
     def cg_body(carry, idx):
@@ -60,11 +61,9 @@ def ConjGrad(A, rhs, N_iter, prec_func=None, eps=1e-30, seed=42):
         w = jsparse.bcoo_dot_general(A, P, dimension_numbers=((2,1), (0,0)))
         alpha = jnp.einsum('bj, bj -> b', Z, R[:, :, idx]) / (jnp.einsum('bj, bj -> b', P, w) + eps)
 
-        X = X + jnp.einsum('b, bj->bj', alpha, P)
+        X = X.at[:, :, idx+1].set(X[:, :, idx] + jnp.einsum('b, bj->bj', alpha, P))
         R = R.at[:, :, idx+1].set(R[:, :, idx] - jnp.einsum('b, bj->bj', alpha, w))
-
-        carry = (X, R, Z, P)
-        return carry, None
+        return (X, R, Z, P), None
 
     carry_init = (X, R, Z, P)        
     (X, R, _, _), _ = scan(cg_body, carry_init, jnp.arange(1, N_iter))
