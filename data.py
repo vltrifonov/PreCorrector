@@ -11,11 +11,12 @@ from jax import device_put
 
 from solvers import FD_2D
 from conj_grad import ConjGrad
+from utils import factorsILUp
 
 # Dataset
-def dataset_FD(grid, N_samples, seed, rhs_distr, rhs_offset, k_distr, k_offset):
+def dataset_FD(grid, N_samples, seed, rhs_distr, rhs_offset, k_distr, k_offset, lhs_type):
     key = random.PRNGKey(seed)
-    A, b = get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset)
+    A, b = get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset, lhs_type)
     u_exact = get_exact_solution(A, b, grid, N_samples)
     
     _, _, receivers, senders, n_node = direc_graph_from_linear_system_sparse(A, b)
@@ -23,9 +24,9 @@ def dataset_FD(grid, N_samples, seed, rhs_distr, rhs_offset, k_distr, k_offset):
     bi_edges = jnp.repeat(bi_edges[None, ...], n_node[0], axis=0)
     return A, b, u_exact, bi_edges
 
-def dataset_Krylov(grid, N_samples, seed, rhs_distr, rhs_offset, k_distr, k_offset, cg_repeats):
+def dataset_Krylov(grid, N_samples, seed, rhs_distr, rhs_offset, k_distr, k_offset, cg_repeats, lhs_type):
     f_repeat = partial(jnp.repeat, repeats=cg_repeats, axis=0)
-    A, b, u_exact, bi_edges = dataset_FD(grid, N_samples, seed, rhs_distr, rhs_offset, k_distr, k_offset)
+    A, b, u_exact, bi_edges = dataset_FD(grid, N_samples, seed, rhs_distr, rhs_offset, k_distr, k_offset, lhs_type)
     u_approx, res = ConjGrad(A, b, N_iter=cg_repeats-1, prec_func=None, seed=42)              # res.shape = (batch, grid, cg_iteration)
     u_approx = jnp.concatenate(u_approx, axis=1).T
     res = jnp.concatenate(res, axis=1).T
@@ -82,9 +83,24 @@ def get_trig_poly(key, n1, n2, alpha, offset):
 def get_random_func(key, *args):
     return lambda x, y, k=key: random.normal(key=k, shape=x.shape)
 
-def get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset):
+@partial(jit, static_argnums=(1, 2))
+def get_random_positive(key, mu=2, std=1, *args):
+    return lambda x, y, k=key: jnp.clip(mu + std * random.normal(key=k, shape=x.shape), min=0)
+
+def get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset, lhs_type):
     keys = random.split(key, N_samples)
     A, rhs = [], []
+    
+    if lhs_type == 'fd':
+        linsystem = linsystemFD(FD_2D)
+    elif lhs_type == 'ilu0':
+        linsystem = linsystemILU0(FD_2D)
+    elif lhs_type == 'ilu1':
+        linsystem = linsystemILU1(FD_2D)
+    elif lhs_type == 'ilu2':
+        linsystem = linsystemILU2(FD_2D)
+    else:
+        raise ValuerError('Invalid `lhs_type`.')
     
     if rhs_distr == 'random':
         rhs_func = get_random_func
@@ -96,7 +112,7 @@ def get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset):
         raise ValuerError('Invalid `rhs_distr`.')
     
     if k_distr == 'random':
-        k_func = get_random_func
+        k_func = get_random_positive
     elif k_distr == 'poisson':
         k_func = lambda k: lambda x, y: 1
     elif isinstance(k_distr, list) and len(k_distr) == 3:
@@ -106,7 +122,7 @@ def get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset):
         
     for k_ in keys:
         subk_ = random.split(k_, 2)
-        rhs_sample, A_sample = FD_2D(grid, [k_func(subk_[0]), rhs_func(subk_[1])])
+        rhs_sample, A_sample = linsystem(grid, [k_func(subk_[0]), rhs_func(subk_[1])])
         A.append(A_sample.reshape(1, grid**2, -1))
         rhs.append(rhs_sample)
     A = device_put(jsparse.bcoo_concatenate(A, dimension=0))
@@ -118,3 +134,33 @@ def get_exact_solution(A, rhs, grid, N_samples):
         jsparse.linalg.spsolve(A_bcsr.data[n], A_bcsr.indices[n], A_bcsr.indptr[n], rhs[n].reshape(-1,)) for n in range(N_samples)
     ])
     return u_exact
+
+def linsystemFD(func):
+    def wrapper(*args, **kwargs):
+        rhs_sample, A_sample = func(*args, **kwargs)
+        return rhs_sample, A_sample
+    return wrapper
+
+def linsystemILU0(func):
+    def wrapper(*args, **kwargs):
+        rhs_sample, A_sample = func(*args, **kwargs)
+        L, U = factorsILUp(A_sample, p=0)
+        A_sample = jsparse.BCOO.from_scipy_sparse(L @ U)
+        return rhs_sample, A_sample
+    return wrapper
+
+def linsystemILU1(func):
+    def wrapper(*args, **kwargs):
+        rhs_sample, A_sample = func(*args, **kwargs)
+        L, U = factorsILUp(A_sample, p=1)
+        A_sample = jsparse.BCOO.from_scipy_sparse(L @ U)
+        return rhs_sample, A_sample
+    return wrapper
+
+def linsystemILU2(func):
+    def wrapper(*args, **kwargs):
+        rhs_sample, A_sample = func(*args, **kwargs)
+        L, U = factorsILUp(A_sample, p=2)
+        A_sample = jsparse.BCOO.from_scipy_sparse(L @ U)
+        return rhs_sample, A_sample
+    return wrapper

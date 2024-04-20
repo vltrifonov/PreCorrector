@@ -1,11 +1,14 @@
 import jax
 import jax.numpy as jnp
-from jax import random, vmap, jit
+from jax import random, vmap, jit, device_put
 from jax.experimental import sparse as jsparse
 
 import equinox as eqx
 import numpy as np
 from functools import partial
+
+from scipy.sparse import csr_matrix, coo_matrix
+import ilupp
 
 from conj_grad import ConjGrad, apply_LLT
 
@@ -69,3 +72,24 @@ def asses_cond_with_res(A, b, P, start_epoch=5, end_epoch=10):
                 )(res)
     out = vmap(lambda n, d: jnp.power(n/d, 2), in_axes=(0), out_axes=(0))(num, denum)
     return out.mean()
+
+def factorsILUp(A, p):
+    '''Input is COO jax matrix.'''
+    a_i = A
+    a_i = coo_matrix((a_i.data, (a_i.indices[:, 0], a_i.indices[:, 1])), shape=a_i.shape, dtype=np.float64).tocsr()
+    l, u = ilupp.ilu0(a_i)
+    for _ in range(p):
+        l, u = ilupp.ilu0(l @ u)
+    return l, u
+
+def batchedILUp(A, p=0):
+    '''Matrix `A` should be in BCOO format with shape (batch, M, N)'''
+    a = A
+    L, U = [], []
+    for i in range(a.shape[0]):
+        l, u = factorsILU(a[i, ...], p)
+        L.append(jsparse.BCOO.from_scipy_sparse((l.tocoo()))[None, ...])
+        U.append(jsparse.BCOO.from_scipy_sparse((u.tocoo()))[None, ...])
+    L = device_put(jsparse.bcoo_concatenate(L, dimension=0))
+    U = device_put(jsparse.bcoo_concatenate(U, dimension=0))
+    return L, U

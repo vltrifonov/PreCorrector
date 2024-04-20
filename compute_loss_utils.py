@@ -72,9 +72,10 @@ def compute_loss_Notay_with_cond(model, X, y, repeat_step):
 #     Ainv_res = vmap(lambda A, b: A @ b, in_axes=(0, 0), out_axes=(0))(Ainv, X[4])
     loss = vmap(Notay_loss, in_axes=(0, 0, 0), out_axes=(0))(Pinv_res, X[0], Ainv_res)#Ainv, X[4])#X[1])
     
-    P = vmap(jsparse.sparsify(lambda L: (L @ L.T)), in_axes=(0), out_axes=(0))(L[::repeat_step, ...])
-    cond_Pinv_A = vmap(lambda P_, A: jnp.linalg.cond(jnp.linalg.inv(P_.todense()) @ A), in_axes=(0), out_axes=(0))(P, X[0][::repeat_step, ...])
-    return jnp.mean(loss), jnp.mean(cond_Pinv_A)
+    cond_approx = asses_cond_with_res(X[0][::repeat_step, ...], X[1][::repeat_step, ...], L[::repeat_step, ...])
+#     P = vmap(jsparse.sparsify(lambda L: (L @ L.T)), in_axes=(0), out_axes=(0))(L[::repeat_step, ...])
+#     cond_Pinv_A = vmap(lambda P_, A: jnp.linalg.cond(jnp.linalg.inv(P_) @ A), in_axes=(0, 0), out_axes=(0))(P.todense(), X[0][::repeat_step, ...])
+    return jnp.mean(loss), cond_approx, #, jnp.mean(cond_Pinv_A)
 
 # Rigid LDLT
 def compute_loss_rigidLDLT(model, X, y):
