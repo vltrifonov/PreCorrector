@@ -2,6 +2,7 @@ import sys
 import itertools
 from functools import partial
 
+import scipy
 import numpy as np
 import jax.numpy as jnp
 from jax import random, jit, vmap, scipy as jscipy
@@ -16,10 +17,10 @@ from utils import factorsILUp
 # Dataset
 def dataset_FD(grid, N_samples, seed, rhs_distr, rhs_offset, k_distr, k_offset, lhs_type):
     key = random.PRNGKey(seed)
-    A, b = get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset, lhs_type)
-    u_exact = get_exact_solution(A, b, grid, N_samples)
+    A, b, u_exact = get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset, lhs_type)
     
-    _, _, receivers, senders, n_node = direc_graph_from_linear_system_sparse(A, b)
+    sl = [slice(None)] + [0]*(A.ndim-3) + [slice(None)]*2            # Slice for ignoring feature dimension
+    _, _, receivers, senders, n_node = direc_graph_from_linear_system_sparse(A[tuple(sl)], b)
     bi_edges = bi_direc_indx(receivers[0, ...], senders[0, ...], n_node[1]) 
     bi_edges = jnp.repeat(bi_edges[None, ...], n_node[0], axis=0)
     return A, b, u_exact, bi_edges
@@ -89,7 +90,7 @@ def get_random_positive(key, mu=2, std=1, *args):
 
 def get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset, lhs_type):
     keys = random.split(key, N_samples)
-    A, rhs = [], []
+    A, rhs, u_exact = [], [], []
     
     if lhs_type == 'fd':
         linsystem = linsystemFD(FD_2D)
@@ -99,6 +100,8 @@ def get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset, lhs_
         linsystem = linsystemILU1(FD_2D)
     elif lhs_type == 'ilu2':
         linsystem = linsystemILU2(FD_2D)
+    elif lhs_type == 'fd_padded_ilu0':
+        linsystem = linsystemFD_paddedILU0(FD_2D)
     else:
         raise ValuerError('Invalid `lhs_type`.')
     
@@ -122,45 +125,61 @@ def get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset, lhs_
         
     for k_ in keys:
         subk_ = random.split(k_, 2)
-        rhs_sample, A_sample = linsystem(grid, [k_func(subk_[0]), rhs_func(subk_[1])])
-        A.append(A_sample.reshape(1, grid**2, -1))
+        rhs_sample, A_sample, u_exact_sample = linsystem(grid, [k_func(subk_[0]), rhs_func(subk_[1])])
+        A.append(A_sample[None, ...])
         rhs.append(rhs_sample)
+        u_exact.append(u_exact_sample)
     A = device_put(jsparse.bcoo_concatenate(A, dimension=0))
-    return A, jnp.array(rhs)
+    return A, jnp.stack(rhs, axis=0), jnp.stack(u_exact, axis=0)
 
-def get_exact_solution(A, rhs, grid, N_samples):
+def get_exact_solution(A, rhs):
     A_bcsr = jsparse.BCSR.from_bcoo(A)
-    u_exact = jnp.stack([
-        jsparse.linalg.spsolve(A_bcsr.data[n], A_bcsr.indices[n], A_bcsr.indptr[n], rhs[n].reshape(-1,)) for n in range(N_samples)
-    ])
+    u_exact = jsparse.linalg.spsolve(A_bcsr.data, A_bcsr.indices, A_bcsr.indptr, rhs)
     return u_exact
+
+
 
 def linsystemFD(func):
     def wrapper(*args, **kwargs):
         rhs_sample, A_sample = func(*args, **kwargs)
-        return rhs_sample, A_sample
+        u_exact = get_exact_solution(A_sample, rhs_sample)
+        return rhs_sample, A_sample, u_exact
     return wrapper
 
 def linsystemILU0(func):
     def wrapper(*args, **kwargs):
         rhs_sample, A_sample = func(*args, **kwargs)
+        u_exact = get_exact_solution(A_sample, rhs_sample)
         L, U = factorsILUp(A_sample, p=0)
         A_sample = jsparse.BCOO.from_scipy_sparse(L @ U)
-        return rhs_sample, A_sample
+        return rhs_sample, A_sample, u_exact
     return wrapper
 
 def linsystemILU1(func):
     def wrapper(*args, **kwargs):
         rhs_sample, A_sample = func(*args, **kwargs)
+        u_exact = get_exact_solution(A_sample, rhs_sample)
         L, U = factorsILUp(A_sample, p=1)
         A_sample = jsparse.BCOO.from_scipy_sparse(L @ U)
-        return rhs_sample, A_sample
+        return rhs_sample, A_sample, u_exact
     return wrapper
 
 def linsystemILU2(func):
     def wrapper(*args, **kwargs):
         rhs_sample, A_sample = func(*args, **kwargs)
+        u_exact = get_exact_solution(A_sample, rhs_sample)
         L, U = factorsILUp(A_sample, p=2)
         A_sample = jsparse.BCOO.from_scipy_sparse(L @ U)
-        return rhs_sample, A_sample
+        return rhs_sample, A_sample, u_exact
+    return wrapper
+
+def linsystemFD_paddedILU0(func):
+    def wrapper(*args, **kwargs):
+        rhs_sample, A_sample = func(*args, **kwargs)
+        u_exact = get_exact_solution(A_sample, rhs_sample)
+        L, _ = factorsILUp(A_sample, p=0)
+        LLT = L + scipy.sparse.triu(L.T, k=1)
+        LLT = jsparse.BCOO.from_scipy_sparse(LLT)[None, ...]
+        A_sample = jsparse.bcoo_concatenate([A_sample[None, ...], LLT], dimension=0)
+        return rhs_sample, A_sample, u_exact
     return wrapper

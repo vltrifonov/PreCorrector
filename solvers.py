@@ -137,4 +137,4 @@ def FD_2D(N_points, F):
     A = coo_matrix((vals, (rows, cols)), shape=(N*M, N*M)).tocsr() / (N*M)
     b = f(coords[:, :, 0].reshape(-1,), coords[:, :, 1].reshape(-1,))
 
-    return b, BCOO.from_scipy_sparse(A)
+    return jnp.array(b), BCOO.from_scipy_sparse(A)

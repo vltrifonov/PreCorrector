@@ -79,11 +79,13 @@ def factorsILUp(A, p):
     a_i = coo_matrix((a_i.data, (a_i.indices[:, 0], a_i.indices[:, 1])), shape=a_i.shape, dtype=np.float64).tocsr()
     l, u = ilupp.ilu0(a_i)
     for _ in range(p):
-        l, u = ilupp.ilu0(l @ u)
+        lu = l @ u
+        lu.data = np.clip(lu.data, a_min=1e-15, a_max=None)
+        l, u = ilupp.ilu0(lu)
     return l, u
 
 def batchedILUp(A, p=0):
-    '''Matrix `A` should be in BCOO format with shape (batch, M, N)'''
+    '''Jax matrix `A` should be in  BCOO format with shape (batch, M, N)'''
     a = A
     L, U = [], []
     for i in range(a.shape[0]):
