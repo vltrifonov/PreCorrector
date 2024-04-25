@@ -4,7 +4,7 @@ import jax.numpy as jnp
 from jax import random
 from jax.experimental import sparse as jsparse
 
-from conj_grad import ConjGrad
+from linsolve.cg import ConjGrad
 
 def dataset_FD(grid, N_samples, seed, rhs_distr, rhs_offset, k_distr, k_offset, lhs_type):
     '''5-points finite difference discretization'''

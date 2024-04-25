@@ -4,7 +4,6 @@ import jax.numpy as jnp
 from jax.experimental import sparse as jsparse
 
 from utils import factorsILUp
-from data import get_exact_solution
 
 # Graph manipulations
 def direc_graph_from_linear_system_sparse(A, b):
@@ -50,51 +49,3 @@ def graph_tril(nodes, edges, receivers, senders):
     receivers_upd = receivers.at[tril_ind].get()
     senders_upd = senders.at[tril_ind].get()
     return nodes, edges_upd, receivers_upd, senders_upd
-
-
-
-# Decorators for padding linear systems with ILU(p)
-def linsystemFD(func):
-    def wrapper(*args, **kwargs):
-        rhs_sample, A_sample = func(*args, **kwargs)
-        u_exact = get_exact_solution(A_sample, rhs_sample)
-        return rhs_sample, A_sample, u_exact
-    return wrapper
-
-def linsystemILU0(func):
-    def wrapper(*args, **kwargs):
-        rhs_sample, A_sample = func(*args, **kwargs)
-        u_exact = get_exact_solution(A_sample, rhs_sample)
-        L, U = factorsILUp(A_sample, p=0)
-        A_sample = jsparse.BCOO.from_scipy_sparse(L @ U)
-        return rhs_sample, A_sample, u_exact
-    return wrapper
-
-def linsystemILU1(func):
-    def wrapper(*args, **kwargs):
-        rhs_sample, A_sample = func(*args, **kwargs)
-        u_exact = get_exact_solution(A_sample, rhs_sample)
-        L, U = factorsILUp(A_sample, p=1)
-        A_sample = jsparse.BCOO.from_scipy_sparse(L @ U)
-        return rhs_sample, A_sample, u_exact
-    return wrapper
-
-def linsystemILU2(func):
-    def wrapper(*args, **kwargs):
-        rhs_sample, A_sample = func(*args, **kwargs)
-        u_exact = get_exact_solution(A_sample, rhs_sample)
-        L, U = factorsILUp(A_sample, p=2)
-        A_sample = jsparse.BCOO.from_scipy_sparse(L @ U)
-        return rhs_sample, A_sample, u_exact
-    return wrapper
-
-def linsystemFD_paddedILU0(func):
-    def wrapper(*args, **kwargs):
-        rhs_sample, A_sample = func(*args, **kwargs)
-        u_exact = get_exact_solution(A_sample, rhs_sample)
-        L, _ = factorsILUp(A_sample, p=0)
-        LLT = L + scipy.sparse.triu(L.T, k=1)
-        LLT = jsparse.BCOO.from_scipy_sparse(LLT)[None, ...]
-        A_sample = jsparse.bcoo_concatenate([A_sample[None, ...], LLT], dimension=0)
-        return rhs_sample, A_sample, u_exact
-    return wrapper

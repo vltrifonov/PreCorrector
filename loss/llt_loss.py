@@ -23,7 +23,7 @@ def compute_loss_llt(model, X, y, reduction=jnp.sum):
     loss = vmap(llt_loss, in_axes=(0, 0, 0), out_axes=(0))(L, X[3], X[1])
     return reduction(loss)
 
-def compute_loss_llt_wit_cond(model, X, y, repeat_step, reduction=jnp.sum):
+def compute_loss_llt_with_cond(model, X, y, repeat_step, reduction=jnp.sum):
     '''Argument `repeat_step` is for ignoring duplicating lhs and rhs when Krylov dataset is used.'''
     nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(X[0], X[1])
     L = vmap(model, in_axes=(0, 0, 0, 0, 0), out_axes=(0))(nodes, edges, receivers, senders, X[2])
