@@ -1,35 +1,10 @@
 import jax.numpy as jnp
-from jax import random, vmap, scipy as jscipy
+from jax import random
 from jax.experimental import sparse as jsparse
 from jax.lax import scan
 
-def apply_Jacobi(model, res, nodes, edges, receivers, senders, bi_edges_indx, A):
-    # TODO
-    diags = vmap(jnp.diag, in_axes=(0), out_axes=(0))(A.todense())
-    inv_diags = vmap(lambda X: 1./X, in_axes=(0), out_axes=(0))(diags)
-    P_inv = vmap(jnp.diag, in_axes=(0), out_axes=(0))(inv_diags)
-    omega = vmap(lambda P_inv, res: P_inv @ res, in_axes=(0, 0), out_axes=(0))(P_inv, res)
-    return omega
-
-def apply_LDLT(res, L, D, *args):
-    y, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(L, res)
-    L_T = jsparse.bcoo_transpose(L, permutation=[0, 2, 1])
-    DL_T = vmap(jsparse.sparsify(lambda A, B: A @ B), in_axes=(0, 0), out_axes=(0))(D, L_T)
-    omega, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(DL_T, y)
-    return omega
-
-def apply_LLT(res, L, *args):
-    y, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(L, res)
-    omega, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(jsparse.bcoo_transpose(L, permutation=[0, 2, 1]), y)
-    return omega
-
-def apply_LU(res, L, U, *args):
-    y, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(L, res)
-    omega, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(U, y)
-    return omega
-
 def ConjGrad(A, rhs, N_iter, prec_func=None, eps=1e-30, seed=42):
-    '''Preconditioned Conjuagte Gradient function'''
+    '''Preconditioned Conjugate Gradient'''
     apply_prec = prec_func if prec_func else lambda res, *args: res
     samples = rhs.shape[0]
     n = rhs.shape[1]
