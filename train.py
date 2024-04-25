@@ -5,8 +5,9 @@ from jax import lax, random
 import jax.numpy as jnp
 import equinox as eqx
 
-from compute_loss_utils import compute_loss_Notay, compute_loss_Notay_with_cond, compute_loss_LLT, compute_loss_LLT_with_cond
-# from compute_loss_utils import compute_loss_rigidLDLT, compute_loss_rigidLDLT_with_cond, 
+from loss.llt_loss import compute_loss_llt, compute_loss_llt_with_cond
+from loss.llt_norm_loss import compute_loss_llt_norm, compute_loss_llt_norm_with_cond
+from loss.notay_loss import compute_loss_notay, compute_loss_notay_with_cond
 from utils import batch_indices
 
 def train(model, data, train_config, loss_name, with_cond, key=42, repeat_step=1):
@@ -20,17 +21,17 @@ def train(model, data, train_config, loss_name, with_cond, key=42, repeat_step=1
     optim = train_config['optimizer'](train_config['lr'], **train_config['optim_params'])
     opt_state = optim.init(eqx.filter(model, eqx.is_array))
     bacth_size = train_config['batch_size']
-    assert len(X_train[0]) >= bacth_size, 'Batch size is greater than dataset_size'
+    assert len(X_train[0]) >= bacth_size, 'Batch size is greater than the dataset size'
     
     if loss_name == 'notay':
-        compute_loss = compute_loss_Notay
-        compute_loss_cond = partial(compute_loss_Notay_with_cond, repeat_step=repeat_step) 
+        compute_loss = compute_loss_notay
+        compute_loss_cond = partial(compute_loss_notay_with_cond, repeat_step=repeat_step) 
     elif loss_name == 'llt':
-        compute_loss = compute_loss_LLT
-        compute_loss_cond = partial(compute_loss_LLT_with_cond, repeat_step=repeat_step)
-    elif loss_name == 'r-ldlt':
-        compute_loss = compute_loss_rigidLDLT
-        compute_loss_cond = compute_loss_rigidLDLT_with_cond
+        compute_loss = compute_loss_llt
+        compute_loss_cond = partial(compute_loss_llt_with_cond, repeat_step=repeat_step)
+    elif loss_name == 'llt-norm':
+        compute_loss = compute_loss_llt_norm
+        compute_loss_cond = partial(compute_loss_llt_norm_with_cond, repeat_step=repeat_step)
     else:
         raise ValueError('Invalid loss name.')
     compute_loss_and_grads = eqx.filter_value_and_grad(compute_loss)
