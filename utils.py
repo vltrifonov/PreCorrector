@@ -9,7 +9,7 @@ import numpy as np
 import ilupp
 
 from linsolve.cg import ConjGrad
-from linsolve.precon import llt_prec
+from linsolve.precond import llt_prec
             
 def batch_indices(key, arr, batch_size):
     dataset_size = len(arr)
