@@ -3,35 +3,13 @@ import jax.numpy as jnp
 from jax import random, vmap, jit, device_put
 from jax.experimental import sparse as jsparse
 
+from functools import partial
 import equinox as eqx
 import numpy as np
-from functools import partial
-
-from scipy.sparse import csr_matrix, coo_matrix
 import ilupp
 
-from conj_grad import ConjGrad, apply_LLT
-
-def graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders):
-    "Lower traingle structure shoule be in the graph format."
-    bcoo_ind = jnp.concatenate([senders[:, None], receivers[:, None]], axis=-1)
-    bcoo_L = jsparse.BCOO((edges, bcoo_ind), shape=(nodes.shape[-1], nodes.shape[-1]))
-    return bcoo_L
-    
-def graph_to_low_tri_mat(nodes, edges, receivers, senders):
-    "Making triangular matrix explicitly. "
-    L = jnp.zeros([nodes.shape[-1]]*2)
-    L = L.at[senders, receivers].set(edges)
-    return jnp.tril(L)
-    
-def graph_tril(nodes, edges, receivers, senders):
-    "Get low triagnle structure implicitly in graph format"
-    tril_ind = jnp.where(jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]])) > 0, 0, 1)   
-    tril_ind = jnp.nonzero(tril_ind, size=int((senders.shape[-1]-nodes.shape[1])/2+nodes.shape[1]), fill_value=jnp.nan)[0].astype(jnp.int32)
-    edges_upd = edges.at[tril_ind].get()
-    receivers_upd = receivers.at[tril_ind].get()
-    senders_upd = senders.at[tril_ind].get()
-    return nodes, edges_upd, receivers_upd, senders_upd
+from linsolve.cg import ConjGrad
+from linsolve.precon import llt_prec
             
 def batch_indices(key, arr, batch_size):
     dataset_size = len(arr)
@@ -58,7 +36,7 @@ def iter_per_residual(cg_res, thresholds=[1e-3, 1e-6, 1e-12]):
 @partial(jit, static_argnums=(3, 4))
 def asses_cond_with_res(A, b, P, start_epoch=5, end_epoch=10):
     '''A, b, P are batched'''
-    cg = partial(ConjGrad, N_iter=end_epoch-1, prec_func=partial(apply_LLT, L=P), seed=42)
+    cg = partial(ConjGrad, N_iter=end_epoch-1, prec_func=partial(llt_prec, L=P), seed=42)
     _, res = cg(A, b)
     res = jnp.linalg.norm(res, axis=1)
     

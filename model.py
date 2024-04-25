@@ -3,19 +3,16 @@ from collections.abc import Sequence
 
 from jax import random, vmap
 import jax.numpy as jnp
-import jax.tree_util as tree
 import jax.nn as jnn
-from jax.experimental import sparse as jsparse
 from jaxtyping import Array, PRNGKeyArray
-
+import jax.tree_util as tree
 from jax.ops import segment_sum
 import equinox as eqx
 
-from utils import graph_to_low_tri_mat_sparse, graph_tril, graph_to_low_tri_mat
-from data import bi_direc_edge_avg
+from data.utils import bi_direc_edge_avg, graph_to_low_tri_mat_sparse, graph_tril
 
 class PrecNet(eqx.Module):
-    '''Perseving diagonal: diag(A) = diag(D) from A = LDL^T'''
+    '''Perseving diagonal as: diag(A) = diag(D) from A = LDL^T'''
     NodeEncoder: eqx.Module
     EdgeEncoder: eqx.Module
     MessagePass: eqx.Module
@@ -96,7 +93,6 @@ class MessagePassing(eqx.Module):
             tree.tree_map,
             in_axes=(None, 0), out_axes=(0)
         )(lambda e: self.aggregate_edges_for_nodes_fn(e, senders, sum_n_node), edges_by_receivers)# edges)
-    
 #         received_attributes = vmap(
 #             tree.tree_map, 
 #             in_axes=(None, 0), out_axes=(0)
