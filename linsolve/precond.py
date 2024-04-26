@@ -1,15 +1,23 @@
 import jax.numpy as jnp
 from jax import vmap, scipy as jscipy
 from jax.experimental import sparse as jsparse
+from functools import partial
+
+from linsolve.spsolve_triangular import jspsolve_triangular
+
+def llt_prec_trig_solve(res, L, *args):
+    y = vmap(partial(jspsolve_triangular, lower=True), in_axes=(0, 0), out_axes=(0))(L, res)
+    omega = vmap(partial(jspsolve_triangular, lower=False), in_axes=(0, 0), out_axes=(0))(jsparse.bcoo_transpose(L, permutation=[0, 2, 1]), y)
+    return omega
 
 def llt_prec(res, L, *args):
-    y, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(L, res)
-    omega, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(jsparse.bcoo_transpose(L, permutation=[0, 2, 1]), y)
+    y, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0, 0), out_axes=(0))(L, res)
+    omega, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0, 0), out_axes=(0))(jsparse.bcoo_transpose(L, permutation=[0, 2, 1]), y)
     return omega
 
 def lu_prec(res, L, U, *args):
-    y, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(L, res)
-    omega, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0), out_axes=(0))(U, y)
+    y, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0, 0), out_axes=(0))(L, res)
+    omega, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0, 0), out_axes=(0))(U, y)
     return omega
 
 def jacobi_prec(model, res, nodes, edges, receivers, senders, bi_edges_indx, A):

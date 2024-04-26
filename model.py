@@ -58,7 +58,6 @@ class FullyConnectedNet(eqx.Module):
         return
     
     def __call__(self, x):
-        print(x.shape)
         for l in self.layers[:-1]:
             x = l(x)
             x = self.act(x)

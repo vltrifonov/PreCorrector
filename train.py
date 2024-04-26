@@ -21,7 +21,7 @@ def train(model, data, train_config, loss_name, with_cond, key=42, repeat_step=1
     optim = train_config['optimizer'](train_config['lr'], **train_config['optim_params'])
     opt_state = optim.init(eqx.filter(model, eqx.is_array))
     bacth_size = train_config['batch_size']
-    assert len(X_train[0]) >= bacth_size, 'Batch size is greater than the dataset size'
+    assert len(X_train[1]) >= bacth_size, 'Batch size is greater than the dataset size'
     
     if loss_name == 'notay':
         compute_loss = compute_loss_notay

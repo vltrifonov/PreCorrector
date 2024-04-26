@@ -7,9 +7,10 @@ from functools import partial
 import equinox as eqx
 import numpy as np
 import ilupp
+from scipy.sparse import coo_matrix
 
 from linsolve.cg import ConjGrad
-from linsolve.precond import llt_prec
+from linsolve.precond import llt_prec_trig_solve
             
 def batch_indices(key, arr, batch_size):
     dataset_size = len(arr)
@@ -36,7 +37,7 @@ def iter_per_residual(cg_res, thresholds=[1e-3, 1e-6, 1e-12]):
 @partial(jit, static_argnums=(3, 4))
 def asses_cond_with_res(A, b, P, start_epoch=5, end_epoch=10):
     '''A, b, P are batched'''
-    cg = partial(ConjGrad, N_iter=end_epoch-1, prec_func=partial(llt_prec, L=P), seed=42)
+    cg = partial(ConjGrad, N_iter=end_epoch-1, prec_func=partial(llt_prec_trig_solve, L=P), seed=42)
     _, res = cg(A, b)
     res = jnp.linalg.norm(res, axis=1)
     
