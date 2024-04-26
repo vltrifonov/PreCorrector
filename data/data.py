@@ -7,6 +7,7 @@ from jax.experimental import sparse as jsparse
 from jax import device_put
 
 from data.solvers import FD_2D
+from utils import factorsILUp
 
 def random_polynomial_2D(x, y, coeff, alpha):
     res = 0
@@ -88,7 +89,7 @@ def linsystemILU0(func):
         rhs_sample, A_sample = func(*args, **kwargs)
         u_exact = get_exact_solution(A_sample, rhs_sample)
         L, U = factorsILUp(A_sample, p=0)
-        A_sample = jsparse.BCOO.from_scipy_sparse(L @ U)
+        A_sample = jsparse.BCOO.from_scipy_sparse(L @ U).sort_indices()
         return rhs_sample, A_sample, u_exact
     return wrapper
 
@@ -97,7 +98,7 @@ def linsystemILU1(func):
         rhs_sample, A_sample = func(*args, **kwargs)
         u_exact = get_exact_solution(A_sample, rhs_sample)
         L, U = factorsILUp(A_sample, p=1)
-        A_sample = jsparse.BCOO.from_scipy_sparse(L @ U)
+        A_sample = jsparse.BCOO.from_scipy_sparse(L @ U).sort_indices()
         return rhs_sample, A_sample, u_exact
     return wrapper
 
@@ -106,7 +107,7 @@ def linsystemILU2(func):
         rhs_sample, A_sample = func(*args, **kwargs)
         u_exact = get_exact_solution(A_sample, rhs_sample)
         L, U = factorsILUp(A_sample, p=2)
-        A_sample = jsparse.BCOO.from_scipy_sparse(L @ U)
+        A_sample = jsparse.BCOO.from_scipy_sparse(L @ U).sort_indices()
         return rhs_sample, A_sample, u_exact
     return wrapper
 
@@ -116,7 +117,7 @@ def linsystemFD_paddedILU0(func):
         u_exact = get_exact_solution(A_sample, rhs_sample)
         L, _ = factorsILUp(A_sample, p=0)
         LLT = L + scipy.sparse.triu(L.T, k=1)
-        LLT = jsparse.BCOO.from_scipy_sparse(LLT)[None, ...]
+        LLT = jsparse.BCOO.from_scipy_sparse(LLT).sort_indices()[None, ...]
         A_sample = jsparse.bcoo_concatenate([A_sample[None, ...], LLT], dimension=0)
         return rhs_sample, A_sample, u_exact
     return wrapper
