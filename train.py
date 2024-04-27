@@ -8,6 +8,8 @@ import equinox as eqx
 from loss.llt_loss import compute_loss_llt, compute_loss_llt_with_cond
 from loss.llt_norm_loss import compute_loss_llt_norm, compute_loss_llt_norm_with_cond
 from loss.notay_loss import compute_loss_notay, compute_loss_notay_with_cond
+from loss.lltres_loss import compute_loss_lltres, compute_loss_lltres_with_cond
+from loss.lltres_norm_loss import compute_loss_lltres_norm, compute_loss_lltres_norm_with_cond
 from utils import batch_indices
 
 def train(model, data, train_config, loss_name, with_cond, key=42, repeat_step=1):
@@ -21,17 +23,24 @@ def train(model, data, train_config, loss_name, with_cond, key=42, repeat_step=1
     optim = train_config['optimizer'](train_config['lr'], **train_config['optim_params'])
     opt_state = optim.init(eqx.filter(model, eqx.is_array))
     bacth_size = train_config['batch_size']
+    reduction = train_config['loss_reduction']
     assert len(X_train[1]) >= bacth_size, 'Batch size is greater than the dataset size'
     
     if loss_name == 'notay':
-        compute_loss = compute_loss_notay
-        compute_loss_cond = partial(compute_loss_notay_with_cond, repeat_step=repeat_step) 
+        compute_loss = partial(compute_loss_notay, reduction=reduction)
+        compute_loss_cond = partial(compute_loss_notay_with_cond, repeat_step=repeat_step, reduction=reduction)
     elif loss_name == 'llt':
-        compute_loss = compute_loss_llt
-        compute_loss_cond = partial(compute_loss_llt_with_cond, repeat_step=repeat_step)
+        compute_loss = partial(compute_loss_llt, reduction=reduction)
+        compute_loss_cond = partial(compute_loss_llt_with_cond, repeat_step=repeat_step, reduction=reduction)
     elif loss_name == 'llt-norm':
-        compute_loss = compute_loss_llt_norm
-        compute_loss_cond = partial(compute_loss_llt_norm_with_cond, repeat_step=repeat_step)
+        compute_loss = partial(compute_loss_llt_norm, reduction=reduction)
+        compute_loss_cond = partial(compute_loss_llt_norm_with_cond, repeat_step=repeat_step, reduction=reduction)
+    elif loss_name == 'llt-res':
+        compute_loss = partial(compute_loss_lltres, reduction=reduction)
+        compute_loss_cond = partial(compute_loss_lltres_with_cond, repeat_step=repeat_step, reduction=reduction)
+    elif loss_name == 'llt-res-norm':
+        compute_loss = partial(compute_loss_lltres_norm, reduction=reduction)
+        compute_loss_cond = partial(compute_loss_lltres_norm_with_cond, repeat_step=repeat_step, reduction=reduction)
     else:
         raise ValueError('Invalid loss name.')
     compute_loss_and_grads = eqx.filter_value_and_grad(compute_loss)

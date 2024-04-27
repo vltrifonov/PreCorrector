@@ -16,6 +16,7 @@ def llt_prec(res, L, *args):
     return omega
 
 def lu_prec(res, L, U, *args):
+    # TODO: update with jspsolve_triangular
     y, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0, 0), out_axes=(0))(L, res)
     omega, _ = vmap(jscipy.sparse.linalg.bicgstab, in_axes=(0, 0), out_axes=(0))(U, y)
     return omega
