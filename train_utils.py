@@ -40,11 +40,11 @@ def case_train(path, config, meta_data_df):
     dataset, grid = config['dataset'], config['grid'] 
     N_samples_train, N_samples_test = config['N_samples_train'], config['N_samples_test']
     
-    rhs_train, rhs_test = config['rhs_train'], config['rhs_test']
-    k_train, k_test = config['k_train'], config['k_test']
+    rhs_train = rhs_test = config['rhs_train']
+    k_train = k_test = config['k_train']
 
-    rhs_offset_train, rhs_offset_test = config['rhs_offset_train'], config['rhs_offset_test']
-    k_offset_train, k_offset_test = config['k_offset_train'], config['k_offset_test']
+    rhs_offset_train = rhs_offset_test = config['rhs_offset_train']
+    k_offset_train = k_offset_test = config['k_offset_train']
     
     lhs_type = config['lhs_type']
     cg_repeats = config['cg_repeats']
@@ -89,30 +89,33 @@ def case_train(path, config, meta_data_df):
         train_config['lr'] = lr
         
     # Generate dataset and iniput data
-    s = perf_counter()
-    if dataset == 'krylov':
-        A_train, A_pad_train, b_train, u_exact_train, bi_edges_train, res_train, u_app_train = dataset_Krylov(grid, N_samples_train, seed=42, rhs_distr=rhs_train, rhs_offset=rhs_offset_train,
-                                                                                                 k_distr=k_train, k_offset=k_offset_train, cg_repeats=cg_repeats, lhs_type=lhs_type)
-        A_test, A_pad_test, b_test, u_exact_test, bi_edges_test, res_test, u_app_test = dataset_Krylov(grid, N_samples_test, seed=43, rhs_distr=rhs_test, rhs_offset=rhs_offset_test,
-                                                                                           k_distr=k_test, k_offset=k_offset_test, cg_repeats=cg_repeats, lhs_type=lhs_type)
-        data = (
-            [A_train, A_pad_train, b_train, bi_edges_train, u_exact_train, res_train, u_app_train],
-            [A_test, A_pad_test, b_test, bi_edges_test, u_exact_test, res_test, u_app_test],
-            jnp.array([1]), jnp.array([1])
-        )
-    elif dataset == 'simple':
-        A_train, A_pad_train, b_train, u_exact_train, bi_edges_train = dataset_FD(grid, N_samples_train, seed=42, rhs_distr=rhs_train, rhs_offset=rhs_offset_train,
-                                                                     k_distr=k_train, k_offset=k_offset_train, lhs_type=lhs_type)
-        A_test, A_pad_test, b_test, u_exact_test, bi_edges_test = dataset_FD(grid, N_samples_test, seed=43, rhs_distr=rhs_test, rhs_offset=rhs_offset_test,
-                                                                 k_distr=k_test, k_offset=k_offset_test, lhs_type=lhs_type)
-        data = (
-            [A_train, A_pad_train, b_train, bi_edges_train, u_exact_train],
-            [A_test, A_pad_test, b_test, bi_edges_test, u_exact_test],
-            jnp.array([1]), jnp.array([1])
-        )
-    else:
-        raise ValueError('Invalid dataset type')
-    dt_data = perf_counter() - s
+    try:
+        s = perf_counter()
+        if dataset == 'krylov':
+            A_train, A_pad_train, b_train, u_exact_train, bi_edges_train, res_train, u_app_train = dataset_Krylov(grid, N_samples_train, seed=42, rhs_distr=rhs_train, rhs_offset=rhs_offset_train,
+                                                                                                     k_distr=k_train, k_offset=k_offset_train, cg_repeats=cg_repeats, lhs_type=lhs_type)
+            A_test, A_pad_test, b_test, u_exact_test, bi_edges_test, res_test, u_app_test = dataset_Krylov(grid, N_samples_test, seed=43, rhs_distr=rhs_test, rhs_offset=rhs_offset_test,
+                                                                                               k_distr=k_test, k_offset=k_offset_test, cg_repeats=cg_repeats, lhs_type=lhs_type)
+            data = (
+                [A_train, A_pad_train, b_train, bi_edges_train, u_exact_train, res_train, u_app_train],
+                [A_test, A_pad_test, b_test, bi_edges_test, u_exact_test, res_test, u_app_test],
+                jnp.array([1]), jnp.array([1])
+            )
+        elif dataset == 'simple':
+            A_train, A_pad_train, b_train, u_exact_train, bi_edges_train = dataset_FD(grid, N_samples_train, seed=42, rhs_distr=rhs_train, rhs_offset=rhs_offset_train,
+                                                                         k_distr=k_train, k_offset=k_offset_train, lhs_type=lhs_type)
+            A_test, A_pad_test, b_test, u_exact_test, bi_edges_test = dataset_FD(grid, N_samples_test, seed=43, rhs_distr=rhs_test, rhs_offset=rhs_offset_test,
+                                                                     k_distr=k_test, k_offset=k_offset_test, lhs_type=lhs_type)
+            data = (
+                [A_train, A_pad_train, b_train, bi_edges_train, u_exact_train],
+                [A_test, A_pad_test, b_test, bi_edges_test, u_exact_test],
+                jnp.array([1]), jnp.array([1])
+            )
+        else:
+            raise ValueError('Invalid dataset type')
+        dt_data = perf_counter() - s
+    except:
+        return meta_data_df
         
         
     # Cond of initial system
