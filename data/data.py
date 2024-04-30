@@ -23,9 +23,8 @@ def get_trig_poly(key, n1, n2, alpha, offset):
 def get_random_func(key, *args):
     return lambda x, y, k=key: random.normal(key=k, shape=x.shape)
 
-@partial(jit, static_argnums=(1, 2))
 def get_random_positive(key, mu=2, std=1, *args):
-    return lambda x, y, k=key: jnp.clip(mu + std * random.normal(key=k, shape=x.shape), min=0)
+    return lambda x, y, k=key: jnp.clip(mu + std * random.normal(key=k, shape=x.shape), a_min=0)
 
 def get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset, lhs_type):
     keys = random.split(key, N_samples)
@@ -55,7 +54,8 @@ def get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset, lhs_
         raise ValuerError('Invalid `rhs_distr`.')
     
     if k_distr == 'random':
-        k_func = get_random_positive
+        raise ValuerError('Suppressed.')
+#         k_func = get_random_positive
     elif k_distr == 'poisson':
         k_func = lambda k: lambda x, y: 1
     elif isinstance(k_distr, list) and len(k_distr) == 3:

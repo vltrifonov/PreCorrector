@@ -12,7 +12,7 @@ from loss.lltres_loss import compute_loss_lltres, compute_loss_lltres_with_cond
 from loss.lltres_norm_loss import compute_loss_lltres_norm, compute_loss_lltres_norm_with_cond
 from utils import batch_indices
 
-def train(model, data, train_config, loss_name, with_cond, key=42, repeat_step=1):
+def train(model, data, train_config, loss_name, key=42, repeat_step=1):
     assert isinstance(train_config, dict)
     assert isinstance(data, Iterable)
     assert len(data) == 4
@@ -55,10 +55,6 @@ def train(model, data, train_config, loss_name, with_cond, key=42, repeat_step=1
         return (model, opt_state), loss
     
     def make_val_step(model, X, y):
-        loss = compute_loss(model, X, y)
-        return loss 
-    
-    def make_val_step_cond(model, X, y):
         loss, cond = compute_loss_cond(model, X, y)
         return loss, cond
     
@@ -69,20 +65,9 @@ def train(model, data, train_config, loss_name, with_cond, key=42, repeat_step=1
         
         carry_inner_init = (model, opt_state)
         (model, opt_state), loss_train = lax.scan(make_step, carry_inner_init, b)
-        loss_test = make_val_step(model, X_test, y_test)
-        return (model, opt_state), [jnp.mean(loss_train), loss_test]
-    
-    def train_body_cond(carry, x):
-        model, opt_state = carry
-        key = random.PRNGKey(x)
-        b = batch_indices(key, X_train[0], bacth_size)
-        
-        carry_inner_init = (model, opt_state)
-        (model, opt_state), loss_train = lax.scan(make_step, carry_inner_init, b)
-        loss_test, cond_test = make_val_step_cond(model, X_test, y_test)
+        loss_test, cond_test = make_val_step(model, X_test, y_test)
         return (model, opt_state), [jnp.mean(loss_train), loss_test, cond_test] 
     
-    train_body_loop = train_body_cond if with_cond else train_body
     carry_init = (model, opt_state)
-    (model, _), losses = lax.scan(train_body_loop, carry_init, jnp.arange(train_config['epoch_num']))
+    (model, _), losses = lax.scan(train_body, carry_init, jnp.arange(train_config['epoch_num']))
     return model, losses

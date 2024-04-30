@@ -11,7 +11,10 @@ from scipy.sparse import coo_matrix
 
 from linsolve.cg import ConjGrad
 from linsolve.precond import llt_prec_trig_solve
-            
+
+import string
+import random as simple_random
+
 def batch_indices(key, arr, batch_size):
     dataset_size = len(arr)
     batch_indices = random.choice(key, jnp.arange(dataset_size, dtype=jnp.int64), shape=[dataset_size // batch_size, batch_size])
@@ -29,15 +32,16 @@ def asses_cond(A, L):
 def iter_per_residual(cg_res, thresholds=[1e-3, 1e-6, 1e-12]):
     iter_per_res = {}
     for k in thresholds:
-        try: val = jnp.where(jnp.linalg.norm(cg_res, axis=1).mean(0) <= k)[0][0].item()
+        try: val = jnp.where(cg_res <= k)[0][0].item()
         except: val = jnp.nan
         iter_per_res[k] = val
     return iter_per_res
 
-@partial(jit, static_argnums=(3, 4))
-def asses_cond_with_res(A, b, P, start_epoch=5, end_epoch=10):
+@partial(jit, static_argnums=(3, 4, 5))
+def asses_cond_with_res(A, b, P, pcg=True, start_epoch=5, end_epoch=10):
     '''A, b, P are batched'''
-    cg = partial(ConjGrad, N_iter=end_epoch-1, prec_func=partial(llt_prec_trig_solve, L=P), seed=42)
+    prec_f = partial(llt_prec_trig_solve, L=P) if pcg else None
+    cg = partial(ConjGrad, N_iter=end_epoch-1, prec_func=prec_f, seed=42)
     _, res = cg(A, b)
     res = jnp.linalg.norm(res, axis=1)
     
@@ -74,3 +78,6 @@ def batchedILUp(A, p=0):
     L = device_put(jsparse.bcoo_concatenate(L, dimension=0))
     U = device_put(jsparse.bcoo_concatenate(U, dimension=0))
     return L, U
+
+def id_generator(size=6, chars=string.ascii_lowercase + string.digits):
+    return ''.join(simple_random.choice(chars) for _ in range(size))
