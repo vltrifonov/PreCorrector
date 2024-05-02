@@ -9,9 +9,6 @@ import numpy as np
 import ilupp
 from scipy.sparse import coo_matrix
 
-from linsolve.cg import ConjGrad
-from linsolve.precond import llt_prec_trig_solve
-
 import string
 import random as simple_random
 
@@ -37,12 +34,10 @@ def iter_per_residual(cg_res, thresholds=[1e-3, 1e-6, 1e-12]):
         iter_per_res[k] = val
     return iter_per_res
 
-@partial(jit, static_argnums=(3, 4, 5))
-def asses_cond_with_res(A, b, P, pcg=True, start_epoch=5, end_epoch=10):
-    '''A, b, P are batched'''
-    prec_f = partial(llt_prec_trig_solve, L=P) if pcg else None
-    cg = partial(ConjGrad, N_iter=end_epoch-1, prec_func=prec_f, seed=42)
-    _, res = cg(A, b)
+@partial(jit, static_argnums=(2, 3, 4))
+def asses_cond_with_res(A, b, cg, start_epoch=5, end_epoch=10):
+    '''A, b are batched'''
+    _, res = partial(cg, N_iter=end_epoch-1, seed=42)(A, b)
     res = jnp.linalg.norm(res, axis=1)
     
     num = vmap(lambda r: jnp.power(2*r[start_epoch], 1/(end_epoch - start_epoch)) + jnp.power(r[-1], 1/(end_epoch - start_epoch)),

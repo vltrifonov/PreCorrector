@@ -1,7 +1,10 @@
 import jax.numpy as jnp
 from jax import vmap
 from jax.experimental import sparse as jsparse
+from functools import partial
 
+from linsolve.cg import ConjGrad
+from linsolve.precond import llt_prec_trig_solve
 from data.utils import direc_graph_from_linear_system_sparse
 from utils import asses_cond_with_res
 
@@ -30,5 +33,6 @@ def compute_loss_llt_with_cond(model, X, y, repeat_step, reduction=jnp.sum):
     L = vmap(model, in_axes=(0, 0, 0, 0, 0), out_axes=(0))(nodes, edges, receivers, senders, X[3])
     loss = vmap(llt_loss, in_axes=(0, 0, 0), out_axes=(0))(L, X[4], X[2])
     
-    cond_approx = asses_cond_with_res(X[0][::repeat_step, ...], X[2][::repeat_step, ...], L[::repeat_step, ...])
+    cg = partial(ConjGrad, prec_func=partial(llt_prec_trig_solve, L=L[::repeat_step, ...]))
+    cond_approx = asses_cond_with_res(X[0][::repeat_step, ...], X[2][::repeat_step, ...], cg)
     return reduction(loss), cond_approx

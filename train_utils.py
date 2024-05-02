@@ -14,7 +14,7 @@ from time import perf_counter
 
 from data.dataset import dataset_Krylov, dataset_FD
 from linsolve.cg import ConjGrad
-from linsolve.precond import llt_prec_trig_solve
+from linsolve.precond import llt_prec_trig_solve, llt_inv_prec
 from model import MessagePassing, FullyConnectedNet, PrecNet, ConstantConv1d, MessagePassingWithDot
 
 from utils import params_count, asses_cond, iter_per_residual, batch_indices, id_generator, iter_per_residual, asses_cond_with_res
@@ -32,7 +32,7 @@ def training_search(config_ls, folder):
     for i, c in enumerate(config_ls):
         print('Started:', i)
         meta_data_df = case_train(path, c, meta_data_df)
-    meta_data_df.to_csv(os.path.join(path, 'meta_data.csv'), index=True)
+        meta_data_df.to_csv(os.path.join(path, 'meta_data.csv'), index=True)
     return
 
 def case_train(path, config, meta_data_df):
@@ -119,7 +119,7 @@ def case_train(path, config, meta_data_df):
         
         
     # Cond of initial system
-    cond_A = asses_cond_with_res(A_test[::cg_repeats, ...], b_test[::cg_repeats, ...], P=None, pcg=False, start_epoch=5, end_epoch=10)
+    cond_A = asses_cond_with_res(A_test[::cg_repeats, ...], b_test[::cg_repeats, ...], partial(ConjGrad, prec_func=None))
     
     # Train the model
     try:
@@ -127,7 +127,7 @@ def case_train(path, config, meta_data_df):
         model, losses = train(model, data, train_config, loss_name=loss_type, repeat_step=cg_repeats)
         dt_train = perf_counter() - s
     except:
-        print('Skip this run: bacth size is greater than dataset size.')
+        print('Skip this run on training step')
         return meta_data_df
     
     # Make L for prec and clean memory
@@ -140,8 +140,13 @@ def case_train(path, config, meta_data_df):
     _, res_I = ConjGrad(A_test[::cg_repeats, ...], b_test[::cg_repeats, ...], N_iter=cg_valid_repeats, prec_func=None, seed=42)
     res_I = jnp.linalg.norm(res_I, axis=1).mean(0)
     
-    # PCG with P = LL^T
-    prec = partial(llt_prec_trig_solve, L=L)
+    # PCG
+    if not config['inv_prec']:
+        # P = LL^T
+        prec = partial(llt_prec_trig_solve, L=L)
+    else:
+        # P^{-1} = LL^T
+        prec = partial(llt_inv_prec, L=L)
     s = perf_counter()
     _, res_LLT = ConjGrad(A_test[::cg_repeats, ...], b_test[::cg_repeats, ...], N_iter=cg_valid_repeats, prec_func=prec, seed=42)
     dt_prec_cg = perf_counter() - s
@@ -172,7 +177,7 @@ def save_meta_params(df, params_values, run_name):
                       'train_loss', 'test_loss', 'cond_prec_system', 'cond_initial_system', 'cg_I_1e_3', 'cg_I_1e_6', 'cg_I_1e_12',
                       'cg_LLT_1e_3', 'cg_LLT_1e_6', 'cg_LLT_1e_12', 'time_data', 'time_train', 'time_pcg']
     for n, v in zip(params_names, params_values):
-        df.loc[run_name, n] = v
+        df.loc[run_name, n] = str(v)
     return df
 
 def get_default_model(seed=42):
