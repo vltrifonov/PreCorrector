@@ -46,16 +46,16 @@ def train(model, data, train_config, loss_name, key=42, repeat_step=1):
     elif loss_name == 'llt-res-norm':
         compute_loss = partial(compute_loss_lltres_norm, reduction=reduction)
         compute_loss_cond = partial(compute_loss_lltres_norm_with_cond, repeat_step=repeat_step, reduction=reduction)
-    elif loss_name == 'right_inv':
+    elif loss_name == 'right-inv':
         compute_loss = partial(compute_loss_right_inv, reduction=reduction)
         compute_loss_cond = partial(compute_loss_right_inv_with_cond, repeat_step=repeat_step, reduction=reduction)
-    elif loss_name == 'left_inv':
+    elif loss_name == 'left-inv':
         compute_loss = partial(compute_loss_left_inv, reduction=reduction)
         compute_loss_cond = partial(compute_loss_left_inv_with_cond, repeat_step=repeat_step, reduction=reduction)
-    elif loss_name == 'mid_inv':
+    elif loss_name == 'mid-inv':
         compute_loss = partial(compute_loss_mid_inv, reduction=reduction)
         compute_loss_cond = partial(compute_loss_mid_inv_with_cond, repeat_step=repeat_step, reduction=reduction)
-    elif loss_name == 'inv_prec':
+    elif loss_name == 'inv-prec':
         compute_loss = partial(compute_loss_inv_prec, reduction=reduction)
         compute_loss_cond = partial(compute_loss_inv_prec_with_cond, repeat_step=repeat_step, reduction=reduction)
     else:

@@ -141,7 +141,7 @@ def case_train(path, config, meta_data_df):
     res_I = jnp.linalg.norm(res_I, axis=1).mean(0)
     
     # PCG
-    if not config['inv_prec']:
+    if loss_type != 'inv-prec':
         # P = LL^T
         prec = partial(llt_prec_trig_solve, L=L)
     else:
@@ -162,7 +162,7 @@ def case_train(path, config, meta_data_df):
     res_steps_LLT = iter_per_residual(res_LLT)
     params_to_save = [dataset, grid, N_samples_train, N_samples_test, rhs_train, rhs_test, k_train, k_test,
                       rhs_offset_train, rhs_offset_test, k_offset_train, k_offset_test, lhs_type, cg_repeats,
-                      loss_type, loss_reduction, batch_size, epoch_num, lr_start, schedule_params, cg_valid_repeats,
+                      loss_type, loss_reduction.split(' ')[1], batch_size, epoch_num, lr_start, schedule_params, cg_valid_repeats,
                       losses[0][-1], losses[1][-1], losses[2][-1], cond_A, *res_steps_I.values(), *res_steps_LLT.values(),
                       dt_data, dt_train, dt_prec_cg]
     
