@@ -13,7 +13,6 @@ def dataset_FD(grid, N_samples, seed, rhs_distr, rhs_offset, k_distr, k_offset, 
     key = random.PRNGKey(seed)
     A, A_paded, b, u_exact = get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset, lhs_type)
     
-#     sl = [slice(None)] + [0]*(A_paded.ndim-3) + [slice(None)]*2            # Slice for ignoring feature dimension  [tuple(sl)]
     _, _, receivers, senders, n_node = direc_graph_from_linear_system_sparse(A_paded, b)
     bi_edges = bi_direc_indx(receivers[0, ...], senders[0, ...], n_node[1]) 
     bi_edges = jnp.repeat(bi_edges[None, ...], n_node[0], axis=0)

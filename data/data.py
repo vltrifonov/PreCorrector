@@ -1,6 +1,8 @@
 import itertools
 from functools import partial
 from scipy.sparse import triu
+from scipy.sparse.linalg import spsolve, spilu
+import numpy as np
 
 import jax.numpy as jnp
 from jax import random, jit
@@ -8,7 +10,7 @@ from jax.experimental import sparse as jsparse
 from jax import device_put
 
 from data.solvers import FD_2D
-from utils import factorsILUp
+from utils import factorsILUp, jBCOO_to_scipyCSR
 
 def random_polynomial_2D(x, y, coeff, alpha):
     res = 0
@@ -33,14 +35,21 @@ def get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset, lhs_
     if lhs_type == 'fd':
         linsystem = linsystemFD(FD_2D)
     elif lhs_type == 'ilu0':
-        linsystem = linsystemILU0(FD_2D)
+        linsystem = linsystemILUp(FD_2D, 0)
     elif lhs_type == 'ilu1':
-        linsystem = linsystemILU1(FD_2D)
+        linsystem = linsystemILUp(FD_2D, 1)
     elif lhs_type == 'ilu2':
-        linsystem = linsystemILU2(FD_2D)
-    elif lhs_type == 'fd_padded_ilu0':
-        raise ValuerError('Suppressed.')
-#         linsystem = linsystemFD_paddedILU0(FD_2D)
+        linsystem = linsystemILUp(FD_2D, 2)
+    elif lhs_type == 'l_ilu0':
+        
+    elif lhs_type == 'l_ilu1':
+        
+    elif lhs_type == 'l_ilu2':
+        
+    elif lhs_type == 'ilut':
+        
+    elif lhs_type == 'l_ilut':
+        
     else:
         raise ValuerError('Invalid `lhs_type`.')
     
@@ -73,57 +82,69 @@ def get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset, lhs_
         u_exact.append(u_exact_sample)
     A = device_put(jsparse.bcoo_concatenate(A, dimension=0))
     A_pad = device_put(jsparse.bcoo_concatenate(A_pad, dimension=0))
-    return A, A_pad, jnp.stack(rhs, axis=0), jnp.stack(u_exact, axis=0)
+    u_exact = device_put(jnp.stack(u_exact, axis=0))
+    return A, A_pad, jnp.stack(rhs, axis=0), u_exact
 
 def get_exact_solution(A, rhs):
-    A_bcsr = jsparse.BCSR.from_bcoo(A)
-    u_exact = jsparse.linalg.spsolve(A_bcsr.data, A_bcsr.indices, A_bcsr.indptr, rhs)
-    return u_exact
+    A_bcsr = jBCOO_to_scipyCSR(A)
+    u_exact = spsolve(A_bcsr, np.asarray(rhs))
+    return jnp.asarray(u_exact)
 
-
-# Decorators for padding linear systems with ILU(p)
+# Decorators for padding linear systems with ILU(p) and ILUt
 def linsystemFD(func):
     def wrapper(*args, **kwargs):
         rhs_sample, A_sample = func(*args, **kwargs)
         u_exact = get_exact_solution(A_sample, rhs_sample)
-        return rhs_sample, A_sample, A_sample, u_exact
+        return rhs_sample, A_sample, A_sample[None, ...], u_exact
     return wrapper
 
-def linsystemILU0(func):
+def linsystemILUp(func, p):
     def wrapper(*args, **kwargs):
         rhs_sample, A_sample = func(*args, **kwargs)
         u_exact = get_exact_solution(A_sample, rhs_sample)
-        L, U = factorsILUp(A_sample, p=0)
-        A_padded = jsparse.BCOO.from_scipy_sparse(L @ U).sort_indices()
+        L, U = factorsILUp(jBCOO_to_scipyCSR(A_sample), p=p)
+        A_padded = jsparse.BCOO.from_scipy_sparse(L @ U).sort_indices()[None, ...]
         return rhs_sample, A_sample, A_padded, u_exact
     return wrapper
 
-def linsystemILU1(func):
+def linsystemILUt(func, threshold=1e-4, fill_factor=10):
     def wrapper(*args, **kwargs):
         rhs_sample, A_sample = func(*args, **kwargs)
         u_exact = get_exact_solution(A_sample, rhs_sample)
-        L, U = factorsILUp(A_sample, p=1)
-        A_padded = jsparse.BCOO.from_scipy_sparse(L @ U).sort_indices()
+        L, U = spilu(jBCOO_to_scipyCSR(A_sample), drop_tol=threshold, fill_factor=fill_factor)
+        A_padded = jsparse.BCOO.from_scipy_sparse(L @ U).sort_indices()[None, ...]
         return rhs_sample, A_sample, A_padded, u_exact
     return wrapper
 
-def linsystemILU2(func):
+def linsystemFD_L_ILU0(func):
     def wrapper(*args, **kwargs):
         rhs_sample, A_sample = func(*args, **kwargs)
         u_exact = get_exact_solution(A_sample, rhs_sample)
-        L, U = factorsILUp(A_sample, p=2)
-        A_padded = jsparse.BCOO.from_scipy_sparse(L @ U).sort_indices()
-        return rhs_sample, A_sample, A_padded, u_exact
+        L, _ = factorsILUp(A_sample, p=0)
+        L = jsparse.BCOO.from_scipy_sparse(L + triu(L.T, k=1)).sort_indices()
+        A_sample = jsparse.bcoo_concatenate([A_sample[None, ...], L[None, ...]], dimension=0)
+        return rhs_sample, A_sample, u_exact
     return wrapper
 
-# Suppressed 
-# def linsystemFD_paddedILU0(func):
-#     def wrapper(*args, **kwargs):
-#         rhs_sample, A_sample = func(*args, **kwargs)
-#         u_exact = get_exact_solution(A_sample, rhs_sample)
-#         L, _ = factorsILUp(A_sample, p=0)
-#         LLT = L + triu(L.T, k=1)
-#         LLT = jsparse.BCOO.from_scipy_sparse(LLT).sort_indices()[None, ...]
-#         A_sample = jsparse.bcoo_concatenate([A_sample[None, ...], LLT], dimension=0)
-#         return rhs_sample, A_sample, u_exact
-#     return wrapper
+def linsystemFD_L_ILUp(func, p):
+    '''p \in {1, 2}'''
+    def wrapper(*args, **kwargs):
+        rhs_sample, A_sample = func(*args, **kwargs)
+        u_exact = get_exact_solution(A_sample, rhs_sample)
+        
+        L_, U_ = factorsILUp(jBCOO_to_scipyCSR(A_sample), p=p-1)
+        A_padded = jsparse.BCOO.from_scipy_sparse(L_ @ U_).sort_indices()
+        L, _ = factorsILUp(A_sample, p=p)
+        L = jsparse.BCOO.from_scipy_sparse(L + triu(L.T, k=1)).sort_indices()
+        A_sample = jsparse.bcoo_concatenate([A_padded[None, ...], L[None, ...]], dimension=0)
+        return rhs_sample, A_sample, u_exact
+    return wrapper 
+
+def linsystemFD_L_ILUt(func, threshold=1e-4, fill_factor=10):
+    def wrapper(*args, **kwargs):
+        rhs_sample, A_sample = func(*args, **kwargs)
+        u_exact = get_exact_solution(A_sample, rhs_sample)
+        L, _ = spilu(jBCOO_to_scipyCSR(A_sample), drop_tol=threshold, fill_factor=fill_factor)
+        A_padded = jsparse.BCOO.from_scipy_sparse(L + triu(L.T, k=1)).sort_indices()[None, ...]
+        return rhs_sample, A_sample, A_padded, u_exact
+    return wrapper

@@ -9,10 +9,11 @@ from utils import factorsILUp
 def direc_graph_from_linear_system_sparse(A, b):
     '''Matrix `A` should be sparse and batched.'''
     nodes = b
-    senders, receivers = A.indices[..., 0], A.indices[..., 1]
     edges = A.data
+    sl = [slice(None)] + [0]*(A.ndim-3) + [slice(None)]*2            # Slice for ignoring feature dimension  [tuple(sl)]
+    A_loc = A[tuple(sl)]
+    senders, receivers = A_loc.indices[..., 0], A_loc.indices[..., 1]
     n_node = jnp.array([nodes.shape[0], nodes.shape[1]])
-#     n_edge = jnp.array([senders.shape[0], senders.shape[1]])
     return nodes, edges, receivers, senders, n_node
 
 def bi_direc_indx(receivers, senders, n_node):

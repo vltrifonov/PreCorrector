@@ -56,11 +56,12 @@ def asses_cond_with_res(A, b, cg, start_epoch=5, end_epoch=10):
     out = vmap(lambda n, d: jnp.power(n/d, 2), in_axes=(0), out_axes=(0))(num, denum)
     return out.mean()
 
+def jBCOO_to_scipyCSR(A):
+    return coo_matrix((A.data, (A.indices[:, 0], A.indices[:, 1])), shape=A.shape, dtype=np.float64).tocsr()
+
 def factorsILUp(A, p):
     '''Input is COO jax matrix.'''
-    a_i = A
-    a_i = coo_matrix((a_i.data, (a_i.indices[:, 0], a_i.indices[:, 1])), shape=a_i.shape, dtype=np.float64).tocsr()
-    l, u = ilupp.ilu0(a_i)
+    l, u = ilupp.ilu0(A)
     for _ in range(p):
         lu = l @ u
         lu.data = np.clip(lu.data, a_min=1e-15, a_max=None)
