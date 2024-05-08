@@ -20,7 +20,7 @@ def ConjGrad(A, rhs, N_iter, prec_func=None, eps=1e-30, seed=42):
     P = Z
 
     w = jsparse.bcoo_dot_general(A, P, dimension_numbers=((2,1), (0,0)))
-    alpha = jnp.einsum('bj, bj -> b', Z, R[:, :, 0]) / (jnp.einsum('bj, bj -> b', w, P) + eps)
+    alpha = jnp.einsum('bj, bj -> b', R[:, :, 0], Z) / (jnp.einsum('bj, bj -> b', P, w) + eps)
     X = X.at[:, :, 1].set(X[:, :, 0] + jnp.einsum('bj, b -> bj', P, alpha))
     R = R.at[:, :, 1].set(R[:, :, 0] - jnp.einsum('bj, b -> bj', w, alpha))
     
@@ -34,7 +34,7 @@ def ConjGrad(A, rhs, N_iter, prec_func=None, eps=1e-30, seed=42):
         P = Z + jnp.einsum('b, bj->bj', beta, P)
 
         w = jsparse.bcoo_dot_general(A, P, dimension_numbers=((2,1), (0,0)))
-        alpha = jnp.einsum('bj, bj -> b', Z, R[:, :, idx]) / (jnp.einsum('bj, bj -> b', P, w) + eps)
+        alpha = jnp.einsum('bj, bj -> b', R[:, :, idx], Z) / (jnp.einsum('bj, bj -> b', P, w) + eps)
 
         X = X.at[:, :, idx+1].set(X[:, :, idx] + jnp.einsum('b, bj->bj', alpha, P))
         R = R.at[:, :, idx+1].set(R[:, :, idx] - jnp.einsum('b, bj->bj', alpha, w))

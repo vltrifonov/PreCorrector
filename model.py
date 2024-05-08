@@ -160,4 +160,4 @@ class ConstantConv1d(eqx.nn.Conv1d):
         self.weight = self.weight * const
         if self.use_bias:
             self.bias = self.bias * const
-        return    
+        return

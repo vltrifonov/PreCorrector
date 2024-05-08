@@ -1,6 +1,6 @@
 import jax
 import jax.numpy as jnp
-from jax import random, vmap, jit, device_put
+from jax import lax ,random, vmap, jit, device_put
 from jax.experimental import sparse as jsparse
 import equinox as eqx
 
@@ -60,7 +60,13 @@ def jBCOO_to_scipyCSR(A):
     return coo_matrix((A.data, (A.indices[:, 0], A.indices[:, 1])), shape=A.shape, dtype=np.float64).tocsr()
 
 def factorsILUp(A, p):
-    '''Input is COO jax matrix.'''
+    l, u = ilupp.ilu0(A)
+    for _ in range(p):
+        lu = l @ u
+        l, u = ilupp.ilu0(lu)
+    return l, u
+
+def factorsILUp_clip(A, p):
     l, u = ilupp.ilu0(A)
     for _ in range(p):
         lu = l @ u
@@ -68,7 +74,19 @@ def factorsILUp(A, p):
         l, u = ilupp.ilu0(lu)
     return l, u
 
-def batchedILUp(A, p=0):
+def batchedILUt(A, threshold, fill_factor):
+    '''Jax matrix `A` should be in  BCOO format with shape (batch, M, N)'''
+    a = A
+    L, U = [], []
+    for i in range(a.shape[0]):
+        l, u = spilu(jBCOO_to_scipyCSR(a[i, ...]), drop_tol=threshold, fill_factor=fill_factor)
+        L.append(jsparse.BCOO.from_scipy_sparse((l.tocoo()))[None, ...])
+        U.append(jsparse.BCOO.from_scipy_sparse((u.tocoo()))[None, ...])
+    L = device_put(jsparse.bcoo_concatenate(L, dimension=0))
+    U = device_put(jsparse.bcoo_concatenate(U, dimension=0))
+    return L, U
+
+def batchedILUp(A, p):
     '''Jax matrix `A` should be in  BCOO format with shape (batch, M, N)'''
     a = A
     L, U = [], []
@@ -134,3 +152,87 @@ def read_meta_data(dir_name):
 def df_threshold_residuals(df):
     display(df.loc[:, ['cg_I_1e_3', 'cg_I_1e_6', 'cg_I_1e_12', 'cg_LLT_1e_3', 'cg_LLT_1e_6', 'cg_LLT_1e_12']])
     return
+
+def ILU2(A):
+    '''A is in CSR format'''
+    n = A.shape[0]
+    ija = A.indices
+    sILU = A.data
+    for i in range(2, n):
+        s = ija[i]
+        while ija[s] <= i-1 and s <= ija[i+1]-1:
+            k = ija[s]
+#             if i == n:
+#                 print(f"{i} {k} +++")
+            sILU[s] /= sILU[k]
+            l = ija[i]
+            while l <= ija[i+1]-1:
+                if ija[ija[i]] > i:
+                    for g in range(ija[k], ija[k+1]-1):
+                        if ija[g] == i:
+                            sILU[i] -= sILU[s] * sILU[g]
+#                             print(f"{i} {i} {k} ***")
+                elif ija[l] > i and ija[l-1] < i:
+                    for g in range(ija[k], ija[k+1]-1):
+                        if ija[g] == i:
+                            sILU[i] -= sILU[s] * sILU[g]
+#                             print(f"{i} {i} {k} 000")
+                if ija[l] >= k+1:
+                    j = ija[l]
+                    for g in range(ija[k], ija[k+1]-1):
+                        if ija[g] == j:
+                            sILU[l] -= sILU[s] * sILU[g]
+#                             print(f"{i} {j} {k}")
+                if ija[ija[i+1]-1] < i and l == ija[i+1]-1:
+                    for g in range(ija[k], ija[k+1]-1):
+                        if ija[g] == i:
+                            sILU[i] -= sILU[s] * sILU[g]
+#                             print(f"{i} {i} {k} ---")
+                l += 1
+            s += 1
+    return sILU
+
+def jILU2(A):
+    n = jnp.asarray(A.shape[0])
+    ija = jnp.asarray(A.indices)
+    sILU = jnp.asarray(A.data)
+    
+    def cond(i, sILU):
+        return i < n
+
+    def body(i, sILU):
+        s = ija[i]
+        def inner_cond(s, sILU):
+            return s <= ija[i+1]-1 and ija[ija[s]] <= i-1
+
+        def inner_body(s, sILU):
+            k = ija[s]
+            sILU = sILU.at[s].set(sILU[s] / sILU[k])
+            l = ija[i]
+            def innermost_cond(l, sILU):
+                return l <= ija[i+1]-1
+
+            def innermost_body(l, sILU):
+                if ija[ija[i]] > i:
+                    for g in range(ija[k], ija[k+1]-1):
+                        if ija[g] == i:
+                            sILU = sILU.at[i].set(sILU[i] - sILU[s] * sILU[g])
+                elif ija[l] > i and ija[l-1] < i:
+                    for g in range(ija[k], ija[k+1]-1):
+                        if ija[g] == i:
+                            sILU = sILU.at[i].set(sILU[i] - sILU[s] * sILU[g])
+                if ija[l] >= k+1:
+                    j = ija[l]
+                    for g in range(ija[k], ija[k+1]-1):
+                        if ija[g] == j:
+                            sILU = sILU.at[l].set(sILU[l] - sILU[s] * sILU[g])
+                return sILU, l + 1
+
+            sILU, _ = lax.while_loop(innermost_cond, innermost_body, (sILU, l))
+            return sILU, s + 1
+
+        sILU, _ = lax.while_loop(inner_cond, inner_body, (sILU, s))
+        return sILU, i + 1
+
+    sILU, _ = lax.while_loop(cond, body, (sILU, 2))
+    return sILU
