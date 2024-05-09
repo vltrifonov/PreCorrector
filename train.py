@@ -31,30 +31,30 @@ def train(model, data, train_config, loss_name, key=42, repeat_step=1):
     reduction = train_config['loss_reduction']
     assert len(X_train[1]) >= batch_size, 'Batch size is greater than the dataset size'
     
-    if loss_name == 'notay':
-        compute_loss = partial(compute_loss_notay, reduction=reduction)
-        compute_loss_cond = partial(compute_loss_notay_with_cond, repeat_step=repeat_step, reduction=reduction)
-    elif loss_name == 'llt':
+    if loss_name == 'llt':
         compute_loss = partial(compute_loss_llt, reduction=reduction)
         compute_loss_cond = partial(compute_loss_llt_with_cond, repeat_step=repeat_step, reduction=reduction)
-    elif loss_name == 'llt-norm':
-        compute_loss = partial(compute_loss_llt_norm, reduction=reduction)
-        compute_loss_cond = partial(compute_loss_llt_norm_with_cond, repeat_step=repeat_step, reduction=reduction)
+#     elif loss_name == 'notay':
+#         compute_loss = partial(compute_loss_notay, reduction=reduction)
+#         compute_loss_cond = partial(compute_loss_notay_with_cond, repeat_step=repeat_step, reduction=reduction)
+#     elif loss_name == 'llt-norm':
+#         compute_loss = partial(compute_loss_llt_norm, reduction=reduction)
+#         compute_loss_cond = partial(compute_loss_llt_norm_with_cond, repeat_step=repeat_step, reduction=reduction)
     elif loss_name == 'llt-res':
         compute_loss = partial(compute_loss_lltres, reduction=reduction)
         compute_loss_cond = partial(compute_loss_lltres_with_cond, repeat_step=repeat_step, reduction=reduction)
-    elif loss_name == 'llt-res-norm':
-        compute_loss = partial(compute_loss_lltres_norm, reduction=reduction)
-        compute_loss_cond = partial(compute_loss_lltres_norm_with_cond, repeat_step=repeat_step, reduction=reduction)
-    elif loss_name == 'right-inv':
-        compute_loss = partial(compute_loss_right_inv, reduction=reduction)
-        compute_loss_cond = partial(compute_loss_right_inv_with_cond, repeat_step=repeat_step, reduction=reduction)
-    elif loss_name == 'left-inv':
-        compute_loss = partial(compute_loss_left_inv, reduction=reduction)
-        compute_loss_cond = partial(compute_loss_left_inv_with_cond, repeat_step=repeat_step, reduction=reduction)
-    elif loss_name == 'mid-inv':
-        compute_loss = partial(compute_loss_mid_inv, reduction=reduction)
-        compute_loss_cond = partial(compute_loss_mid_inv_with_cond, repeat_step=repeat_step, reduction=reduction)
+#     elif loss_name == 'llt-res-norm':
+#         compute_loss = partial(compute_loss_lltres_norm, reduction=reduction)
+#         compute_loss_cond = partial(compute_loss_lltres_norm_with_cond, repeat_step=repeat_step, reduction=reduction)
+#     elif loss_name == 'right-inv':
+#         compute_loss = partial(compute_loss_right_inv, reduction=reduction)
+#         compute_loss_cond = partial(compute_loss_right_inv_with_cond, repeat_step=repeat_step, reduction=reduction)
+#     elif loss_name == 'left-inv':
+#         compute_loss = partial(compute_loss_left_inv, reduction=reduction)
+#         compute_loss_cond = partial(compute_loss_left_inv_with_cond, repeat_step=repeat_step, reduction=reduction)
+#     elif loss_name == 'mid-inv':
+#         compute_loss = partial(compute_loss_mid_inv, reduction=reduction)
+#         compute_loss_cond = partial(compute_loss_mid_inv_with_cond, repeat_step=repeat_step, reduction=reduction)
     elif loss_name == 'inv-prec':
         compute_loss = partial(compute_loss_inv_prec, reduction=reduction)
         compute_loss_cond = partial(compute_loss_inv_prec_with_cond, repeat_step=repeat_step, reduction=reduction)

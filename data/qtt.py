@@ -122,6 +122,18 @@ def scipy_validation(A, b, prec_f=lambda x: x):
     iters_dict['1e-12'] = iters
     return iters_dict
 
+def batch_scipy_validation(batched_A, batched_b, prec_f):
+    iters_3, iters_6, iters_12 = [], [], []
+    for i in range(batched_A.shape[0]):
+        print(i)
+        A_i, b_i = batched_A[i, ...], batched_b[i, ...]
+        iters_dict = scipy_validation(A_i, b_i, prec_f)
+        iters_3.append(iters_dict['1e-3'])
+        iters_6.append(iters_dict['1e-6'])
+        iters_12.append(iters_dict['1e-12'])
+    iters_3, iters_6, iters_12 = np.mean(iters_3), np.mean(iters_6), np.mean(iters_12)
+    return {'1e-3': iters_3, '1e-6': iters_6, '1e-12': iters_12}
+
 def solve_precChol(x, L, U, *args):
     # r = (LL')^{-1} x
     Linv_x = splinalg.spsolve_triangular(L, x, lower=True)
@@ -169,12 +181,12 @@ def load_pde_data(pde, grid, variance, lhs_type, return_train, fill_factor=None,
         get_linsystem_pad = partial(pad_lhs_ILUp, p=1)
     elif lhs_type == 'ilu2':
         get_linsystem_pad = partial(pad_lhs_ILUp, p=2)
-    elif lhs_type == 'ilut':
+    elif lhs_type == 'ict':
         assert isinstance(fill_factor, int) and isinstance(threshold, float)
-        get_linsystem_pad = partial(pad_lhs_ILUt, fill_factor=fill_factor, threshold=threshold)
-    elif lhs_type == 'l_ilut':
+        get_linsystem_pad = partial(pad_lhs_ICt, fill_factor=fill_factor, threshold=threshold)
+    elif lhs_type == 'l_ict':
         assert isinstance(fill_factor, int) and isinstance(threshold, float)
-        get_linsystem_pad = partial(pad_lhs_LfromILUt, fill_factor=fill_factor, threshold=threshold)
+        get_linsystem_pad = partial(pad_lhs_ICt, fill_factor=fill_factor, threshold=threshold)
     elif lhs_type == 'a_pow':
         assert isinstance(power, int) and power >= 2
         get_linsystem_pad = partial(pad_lhs_power, power=power)
@@ -205,20 +217,22 @@ def pad_lhs_ILUp(A, p, *args):
     A_pad = device_put(jsparse.bcoo_concatenate(A_pad, dimension=0))
     return A_pad
 
-def pad_lhs_ILUt(A, fill_factor, threshold, *args):
+def pad_lhs_ICt(A, fill_factor, threshold, *args):
     N = A.shape[0]
     A_pad = []
     for n in range(N):
-        L, U = ilupp.ilut(jBCOO_to_scipyCSR(A[n, ...]), fill_in=fill_factor, threshold=threshold)
-        A_pad.append(jsparse.BCOO.from_scipy_sparse(L @ U).sort_indices()[None, ...])
+        L = ilupp.icholt(jBCOO_to_scipyCSR(A[n, ...]), add_fill_in=fill_factor, threshold=threshold)
+#         L, U = ilupp.ilut(jBCOO_to_scipyCSR(A[n, ...]), fill_in=fill_factor, threshold=threshold)
+        A_pad.append(jsparse.BCOO.from_scipy_sparse(L @ L.T).sort_indices()[None, ...])
     A_pad = device_put(jsparse.bcoo_concatenate(A_pad, dimension=0))
     return A_pad
 
-def pad_lhs_LfromILUt(A, fill_factor, threshold, *args):
+def pad_lhs_LfromICt(A, fill_factor, threshold, *args):
     N = A.shape[0]
     A_pad = []
     for n in range(N):
-        L, _ = ilupp.ilut(jBCOO_to_scipyCSR(A[n, ...]), fill_in=fill_factor, threshold=threshold)
+        L = ilupp.icholt(jBCOO_to_scipyCSR(A[n, ...]), add_fill_in=fill_factor, threshold=threshold)
+#         L, _ = ilupp.ilut(jBCOO_to_scipyCSR(A[n, ...]), fill_in=fill_factor, threshold=threshold)
         A_pad.append(jsparse.BCOO.from_scipy_sparse(L + triu(L.T, k=1)).sort_indices()[None, ...])
     A_pad = device_put(jsparse.bcoo_concatenate(A_pad, dimension=0))
     return A_pad

@@ -24,21 +24,29 @@ class PrecNet(eqx.Module):
         self.EdgeEncoder = EdgeEncoder
         self.MessagePass = MessagePass
         self.EdgeDecoder = EdgeDecoder
-        return
+        return    
     
-    def __call__(self, nodes, edges, receivers, senders, real_lhs_edges, bi_edges_indx):
-         # Save main diagonal
-        diag_edge_indx = jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]]))
-        diag_edge_indx = jnp.where(diag_edge_indx == 0, 1, 0)
-        diag_edge_indx = jnp.nonzero(diag_edge_indx, size=nodes.shape[0], fill_value=jnp.nan)[0].astype(jnp.int32)
-        diag_edge = real_lhs_edges.at[diag_edge_indx].get()
+    def __call__(self, train_graph, bi_edges_indx, lhs_graph):
+        lhs_nodes, lhs_edges, lhs_receivers, lhs_senders = lhs_graph
+        nodes, edges, receivers, senders = train_graph
         
+         # Save main diagonal in real lhs
+        diag_edge_indx_lhs = jnp.diff(jnp.hstack([lhs_senders[:, None], lhs_receivers[:, None]]))
+        diag_edge_indx_lhs = jnp.argwhere(diag_edge_indx_lhs == 0, size=lhs_nodes.shape[0], fill_value=jnp.nan)[:, 0].astype(jnp.int32)
+        diag_edge = lhs_edges.at[diag_edge_indx_lhs].get()
+        
+        # Main diagonal in padded lhs for train
+        diag_edge_indx = jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]]))
+        diag_edge_indx = jnp.argwhere(diag_edge_indx == 0, size=nodes.shape[0], fill_value=jnp.nan)[:, 0].astype(jnp.int32)
+                
         nodes = self.NodeEncoder(nodes[None, ...])
         edges = self.EdgeEncoder(edges[None, ...])
         nodes, edges, receivers, senders = self.MessagePass(nodes, edges, receivers, senders)
         edges = bi_direc_edge_avg(edges, bi_edges_indx)
-        edges = self.EdgeDecoder(edges)
-        edges = edges.at[0, diag_edge_indx].set(jnp.sqrt(diag_edge))
+        edges = self.EdgeDecoder(edges)[0, ...]
+        
+        # Put the real diagonal into trained lhs
+        edges = edges.at[diag_edge_indx].set(jnp.sqrt(diag_edge))
         
         nodes, edges, receivers, senders = graph_tril(nodes, jnp.squeeze(edges), receivers, senders)
         low_tri = graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders)
