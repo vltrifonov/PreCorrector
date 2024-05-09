@@ -7,6 +7,20 @@ from jax.experimental import sparse as jsparse
 from linsolve.cg import ConjGrad
 from data.data import get_A_b
 from data.utils import direc_graph_from_linear_system_sparse, bi_direc_indx
+from data.qtt import load_pde_data
+
+    
+def dataset_qtt(pde, grid, variance, lhs_type, return_train, fill_factor=None, threshold=None, power=None):
+    A, A_pad, b, x = load_pde_data(pde, grid, variance, lhs_type, return_train, fill_factor=fill_factor, threshold=threshold, power=power)
+    
+    _, _, receivers, senders, n_node = direc_graph_from_linear_system_sparse(A_pad, b)
+    bi_edges = bi_direc_indx(receivers[0, ...], senders[0, ...], n_node[1]) 
+    bi_edges = jnp.repeat(bi_edges[None, ...], n_node[0], axis=0)
+    return A, A_pad, b, x, bi_edges
+
+
+# -------------------------------------------------------------------------------------------
+
 
 def dataset_FD(grid, N_samples, seed, rhs_distr, rhs_offset, k_distr, k_offset, lhs_type):
     '''5-points finite difference discretization'''

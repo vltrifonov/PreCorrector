@@ -27,9 +27,9 @@ def train(model, data, train_config, loss_name, key=42, repeat_step=1):
     
     optim = train_config['optimizer'](train_config['lr'], **train_config['optim_params'])
     opt_state = optim.init(eqx.filter(model, eqx.is_array))
-    bacth_size = train_config['batch_size']
+    batch_size = train_config['batch_size']
     reduction = train_config['loss_reduction']
-    assert len(X_train[1]) >= bacth_size, 'Batch size is greater than the dataset size'
+    assert len(X_train[1]) >= batch_size, 'Batch size is greater than the dataset size'
     
     if loss_name == 'notay':
         compute_loss = partial(compute_loss_notay, reduction=reduction)
@@ -78,7 +78,7 @@ def train(model, data, train_config, loss_name, key=42, repeat_step=1):
     def train_body(carry, x):
         model, opt_state = carry
         key = random.PRNGKey(x)
-        b = batch_indices(key, X_train[0], bacth_size)
+        b = batch_indices(key, X_train[0], batch_size)
         
         carry_inner_init = (model, opt_state)
         (model, opt_state), loss_train = lax.scan(make_step, carry_inner_init, b)

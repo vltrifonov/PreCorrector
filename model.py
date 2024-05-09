@@ -26,15 +26,15 @@ class PrecNet(eqx.Module):
         self.EdgeDecoder = EdgeDecoder
         return
     
-    def __call__(self, nodes, edges, receivers, senders, bi_edges_indx):
+    def __call__(self, nodes, edges, receivers, senders, real_lhs_edges, bi_edges_indx):
          # Save main diagonal
         diag_edge_indx = jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]]))
         diag_edge_indx = jnp.where(diag_edge_indx == 0, 1, 0)
         diag_edge_indx = jnp.nonzero(diag_edge_indx, size=nodes.shape[0], fill_value=jnp.nan)[0].astype(jnp.int32)
-        diag_edge = edges.at[0, diag_edge_indx].get()
+        diag_edge = real_lhs_edges.at[diag_edge_indx].get()
         
         nodes = self.NodeEncoder(nodes[None, ...])
-        edges = self.EdgeEncoder(edges)
+        edges = self.EdgeEncoder(edges[None, ...])
         nodes, edges, receivers, senders = self.MessagePass(nodes, edges, receivers, senders)
         edges = bi_direc_edge_avg(edges, bi_edges_indx)
         edges = self.EdgeDecoder(edges)

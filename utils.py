@@ -63,13 +63,6 @@ def factorsILUp(A, p):
     l, u = ilupp.ilu0(A)
     for _ in range(p):
         lu = l @ u
-        l, u = ilupp.ilu0(lu)
-    return l, u
-
-def factorsILUp_clip(A, p):
-    l, u = ilupp.ilu0(A)
-    for _ in range(p):
-        lu = l @ u
         lu.data = np.clip(lu.data, a_min=1e-15, a_max=None)
         l, u = ilupp.ilu0(lu)
     return l, u
@@ -79,7 +72,7 @@ def batchedILUt(A, threshold, fill_factor):
     a = A
     L, U = [], []
     for i in range(a.shape[0]):
-        l, u = spilu(jBCOO_to_scipyCSR(a[i, ...]), drop_tol=threshold, fill_factor=fill_factor)
+        l, u = ilupp.ilut(jBCOO_to_scipyCSR(a[i, ...]), fill_in=fill_factor, threshold=threshold)
         L.append(jsparse.BCOO.from_scipy_sparse((l.tocoo()))[None, ...])
         U.append(jsparse.BCOO.from_scipy_sparse((u.tocoo()))[None, ...])
     L = device_put(jsparse.bcoo_concatenate(L, dimension=0))
@@ -91,7 +84,7 @@ def batchedILUp(A, p):
     a = A
     L, U = [], []
     for i in range(a.shape[0]):
-        l, u = factorsILU(a[i, ...], p)
+        l, u = factorsILUp(jBCOO_to_scipyCSR(a[i, ...]), p)
         L.append(jsparse.BCOO.from_scipy_sparse((l.tocoo()))[None, ...])
         U.append(jsparse.BCOO.from_scipy_sparse((u.tocoo()))[None, ...])
     L = device_put(jsparse.bcoo_concatenate(L, dimension=0))
@@ -153,41 +146,37 @@ def df_threshold_residuals(df):
     display(df.loc[:, ['cg_I_1e_3', 'cg_I_1e_6', 'cg_I_1e_12', 'cg_LLT_1e_3', 'cg_LLT_1e_6', 'cg_LLT_1e_12']])
     return
 
+#--------------------------------------------------------------------------------------------------------------
+
 def ILU2(A):
     '''A is in CSR format'''
     n = A.shape[0]
     ija = A.indices
     sILU = A.data
-    for i in range(2, n):
+    for i in range(1, n):
         s = ija[i]
-        while ija[s] <= i-1 and s <= ija[i+1]-1:
+        while ija[s] <= i - 1 and s <= ija[i + 1] - 1:
             k = ija[s]
-#             if i == n:
-#                 print(f"{i} {k} +++")
             sILU[s] /= sILU[k]
             l = ija[i]
-            while l <= ija[i+1]-1:
+            while l <= ija[i + 1] - 1:
                 if ija[ija[i]] > i:
-                    for g in range(ija[k], ija[k+1]-1):
+                    for g in range(ija[k], ija[k + 1] - 1):
                         if ija[g] == i:
                             sILU[i] -= sILU[s] * sILU[g]
-#                             print(f"{i} {i} {k} ***")
-                elif ija[l] > i and ija[l-1] < i:
-                    for g in range(ija[k], ija[k+1]-1):
+                elif ija[l] > i and ija[l - 1] < i:
+                    for g in range(ija[k], ija[k + 1] - 1):
                         if ija[g] == i:
                             sILU[i] -= sILU[s] * sILU[g]
-#                             print(f"{i} {i} {k} 000")
-                if ija[l] >= k+1:
+                if ija[l] >= k + 1:
                     j = ija[l]
-                    for g in range(ija[k], ija[k+1]-1):
+                    for g in range(ija[k], ija[k + 1] - 1):
                         if ija[g] == j:
                             sILU[l] -= sILU[s] * sILU[g]
-#                             print(f"{i} {j} {k}")
-                if ija[ija[i+1]-1] < i and l == ija[i+1]-1:
-                    for g in range(ija[k], ija[k+1]-1):
+                if ija[ija[i + 1] - 1] < i and l == ija[i + 1] - 1:
+                    for g in range(ija[k], ija[k + 1] - 1):
                         if ija[g] == i:
                             sILU[i] -= sILU[s] * sILU[g]
-#                             print(f"{i} {i} {k} ---")
                 l += 1
             s += 1
     return sILU

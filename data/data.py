@@ -41,15 +41,15 @@ def get_A_b(grid, N_samples, key, rhs_distr, rhs_offset, k_distr, k_offset, lhs_
     elif lhs_type == 'ilu2':
         linsystem = linsystemILUp(FD_2D, 2)
     elif lhs_type == 'l_ilu0':
-        
+        pass
     elif lhs_type == 'l_ilu1':
-        
+        pass
     elif lhs_type == 'l_ilu2':
-        
+        pass
     elif lhs_type == 'ilut':
-        
+        pass
     elif lhs_type == 'l_ilut':
-        
+        pass
     else:
         raise ValuerError('Invalid `lhs_type`.')
     
