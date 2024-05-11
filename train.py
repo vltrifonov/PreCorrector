@@ -15,6 +15,7 @@ from loss.left_inv_loss import compute_loss_left_inv, compute_loss_left_inv_with
 from loss.right_inv_loss import compute_loss_right_inv, compute_loss_right_inv_with_cond
 from loss.mid_inv_loss import compute_loss_mid_inv, compute_loss_mid_inv_with_cond
 from loss.inv_prec_loss import compute_loss_inv_prec, compute_loss_inv_prec_with_cond
+from loss.inv_prec_rhs_loss import compute_loss_inv_prec_rhs, compute_loss_inv_prec_rhs_with_cond
 from utils import batch_indices
 
 def train(model, data, train_config, loss_name, key=42, repeat_step=1):
@@ -58,13 +59,16 @@ def train(model, data, train_config, loss_name, key=42, repeat_step=1):
     elif loss_name == 'inv-prec':
         compute_loss = partial(compute_loss_inv_prec, reduction=reduction)
         compute_loss_cond = partial(compute_loss_inv_prec_with_cond, repeat_step=repeat_step, reduction=reduction)
+    elif loss_name == 'inv-prec-rhs':
+        compute_loss = partial(compute_loss_inv_prec_rhs, reduction=reduction)
+        compute_loss_cond = partial(compute_loss_inv_prec_rhs_with_cond, repeat_step=repeat_step, reduction=reduction)
     else:
         raise ValueError('Invalid loss name.')
     compute_loss_and_grads = eqx.filter_value_and_grad(compute_loss)
     
     def make_step(carry, ind):
         model, opt_state = carry
-        batched_X = [arr[ind, ...] for arr in X_train]
+        batched_X = [arr[ind] for arr in X_train]
         
         loss, grads = compute_loss_and_grads(model, batched_X, y_train)
         updates, opt_state = optim.update(grads, opt_state, eqx.filter(model, eqx.is_array))

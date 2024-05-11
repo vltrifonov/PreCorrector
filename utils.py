@@ -31,7 +31,7 @@ def asses_cond(A, L):
     cond_Pinv_A = vmap(lambda P_, A: jnp.linalg.cond(jnp.linalg.inv(P_.todense()) @ A), in_axes=(0, 0), out_axes=(0))(P, A)
     return jnp.mean(cond_A), jnp.mean(cond_Pinv_A)
 
-def iter_per_residual(cg_res, thresholds=[1e-3, 1e-6, 1e-12]):
+def iter_per_residual(cg_res, thresholds=[1e-3, 1e-6, 1e-9, 1e-12]):
     iter_per_res = {}
     for k in thresholds:
         try: val = jnp.where(cg_res <= k)[0][0].item()

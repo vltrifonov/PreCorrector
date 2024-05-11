@@ -153,7 +153,7 @@ def solve_invLU(x, L, U, *args):
 def make_BCOO(Aval, Aind, N_points):
     return jsparse.BCOO((Aval, Aind), shape=(N_points**2, N_points**2))
 
-def load_pde_data(pde, grid, variance, lhs_type, return_train, fill_factor=None, threshold=None, power=None,
+def load_pde_data(pde, grid, variance, lhs_type, return_train, N_samples=1000, fill_factor=None, threshold=None, power=None,
                   cov_model='Gauss', data_dir='/mnt/local/data/vtrifonov/prec-learning-Notay-loss/paper_datasets'):
     if pde == 'poisson' or pde == 'div_k_grad':
         name = pde
@@ -197,9 +197,9 @@ def load_pde_data(pde, grid, variance, lhs_type, return_train, fill_factor=None,
         file = jnp.load(os.path.join(data_dir, name+'_train.npz'))      
     else:
         file = jnp.load(os.path.join(data_dir, name+'_test.npz'))
-    A = vmap(make_BCOO, in_axes=(0, 0, None), out_axes=(0))(file['Aval'], file['Aind'], grid)
-    b = jnp.asarray(file['b'])
-    x = jnp.asarray(file['x'])
+    A = vmap(make_BCOO, in_axes=(0, 0, None), out_axes=(0))(file['Aval'], file['Aind'], grid)[:N_samples, ...]
+    b = jnp.asarray(file['b'])[:N_samples, ...]
+    x = jnp.asarray(file['x'])[:N_samples, ...]
     A_pad = get_linsystem_pad(A)
     return A, A_pad, b, x
 

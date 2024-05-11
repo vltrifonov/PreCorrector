@@ -9,12 +9,11 @@ from data.utils import direc_graph_from_linear_system_sparse
 from utils import asses_cond_with_res
 
 @jsparse.sparsify
-def inv_prec_loss(L, A):
+def inv_prec_rhs_loss(L, x, b):
     "L should be dense (and not batched since function is vmaped)"
-#     return jnp.square(jnp.linalg.norm(L @ (L.T @ A) - jnp.eye(A.shape[0]), ord='fro'))
-    return jnp.linalg.norm(L @ (L.T @ A) - jnp.eye(A.shape[0]), ord='fro')
+    return jnp.square(jnp.linalg.norm(L @ (L.T @ b) - x, ord=2))
 
-def compute_loss_inv_prec(model, X, y, reduction=jnp.sum):
+def compute_loss_inv_prec_rhs(model, X, y, reduction=jnp.sum):
     '''Placeholder for supervised learning `y`.
        Positions in `X`:
          X[0] - lhs A (for cond calc).
@@ -26,15 +25,15 @@ def compute_loss_inv_prec(model, X, y, reduction=jnp.sum):
     nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(X[1], X[2])
     lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(X[0], X[2])
     L = vmap(model, in_axes=((0, 0, 0, 0), 0, (0, 0, 0, 0)), out_axes=(0))((nodes, edges, receivers, senders), X[3], (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders))
-    loss = vmap(inv_prec_loss, in_axes=(0, 0), out_axes=(0))(L, X[0].todense())
+    loss = vmap(inv_prec_rhs_loss, in_axes=(0, 0, 0), out_axes=(0))(L, X[4], X[2])
     return reduction(loss)
 
-def compute_loss_inv_prec_with_cond(model, X, y, repeat_step, reduction=jnp.sum):
+def compute_loss_inv_prec_rhs_with_cond(model, X, y, repeat_step, reduction=jnp.sum):
     '''Argument `repeat_step` is for ignoring duplicating lhs and rhs when Krylov dataset is used.'''
     nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(X[1], X[2])
     lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(X[0], X[2])
     L = vmap(model, in_axes=((0, 0, 0, 0), 0, (0, 0, 0, 0)), out_axes=(0))((nodes, edges, receivers, senders), X[3], (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders))
-    loss = vmap(inv_prec_loss, in_axes=(0, 0), out_axes=(0))(L, X[0].todense())
+    loss = vmap(inv_prec_rhs_loss, in_axes=(0, 0, 0), out_axes=(0))(L, X[4], X[2])
     
     cg = partial(ConjGrad, prec_func=partial(llt_inv_prec, L=L[::repeat_step, ...]))
     cond_approx = asses_cond_with_res(X[0][::repeat_step, ...], X[2][::repeat_step, ...], cg)
