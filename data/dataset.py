@@ -11,16 +11,7 @@ from data.qtt import load_pde_data
 
     
 def dataset_qtt(pde, grid, variance, lhs_type, return_train, N_samples, fill_factor=None, threshold=None, power=None):
-    A, A_pad, b, x = load_pde_data(pde, grid, variance, lhs_type, return_train, N_samples=N_samples, fill_factor=fill_factor, threshold=threshold, power=power)
-    
-    _, _, receivers, senders, n_node = direc_graph_from_linear_system_sparse(A_pad, b)
-    bi_edges = []
-    max_len = 0
-    for i in range(n_node[0]):
-        bi_edges.append(bi_direc_indx(receivers[i, ...], senders[i, ...], n_node[1])[None, ...])
-        len_ = bi_edges[-1].shape[1]
-        max_len = len_ if len_ > max_len else max_len
-    bi_edges = jnp.concatenate(bi_edges, axis=0)
+    A, A_pad, b, x, bi_edges = load_pde_data(pde, grid, variance, lhs_type, return_train, N_samples=N_samples, fill_factor=fill_factor, threshold=threshold, power=power)
     return A, A_pad, b, x, bi_edges
 
 

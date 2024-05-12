@@ -68,7 +68,7 @@ def train(model, data, train_config, loss_name, key=42, repeat_step=1):
     
     def make_step(carry, ind):
         model, opt_state = carry
-        batched_X = [arr[ind] for arr in X_train]
+        batched_X = [arr[ind, ...] for arr in X_train]
         
         loss, grads = compute_loss_and_grads(model, batched_X, y_train)
         updates, opt_state = optim.update(grads, opt_state, eqx.filter(model, eqx.is_array))

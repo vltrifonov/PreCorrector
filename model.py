@@ -33,7 +33,7 @@ class PrecNet(eqx.Module):
          # Save main diagonal in real lhs
         diag_edge_indx_lhs = jnp.diff(jnp.hstack([lhs_senders[:, None], lhs_receivers[:, None]]))
         diag_edge_indx_lhs = jnp.argwhere(diag_edge_indx_lhs == 0, size=lhs_nodes.shape[0], fill_value=jnp.nan)[:, 0].astype(jnp.int32)
-        diag_edge = lhs_edges.at[diag_edge_indx_lhs].get()
+        diag_edge = lhs_edges.at[diag_edge_indx_lhs].get(mode='drop', fill_value=0)
         
         # Main diagonal in padded lhs for train
         diag_edge_indx = jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]]))
@@ -46,7 +46,7 @@ class PrecNet(eqx.Module):
         edges = self.EdgeDecoder(edges)[0, ...]
         
         # Put the real diagonal into trained lhs
-        edges = edges.at[diag_edge_indx].set(jnp.sqrt(diag_edge))
+        edges = edges.at[diag_edge_indx].set(jnp.sqrt(diag_edge), mode='drop')
         
         nodes, edges, receivers, senders = graph_tril(nodes, jnp.squeeze(edges), receivers, senders)
         low_tri = graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders)
@@ -122,7 +122,7 @@ class MessagePassing(eqx.Module):
             received_attributes[:, non_diag_edge_idx]
         ], axis=0)
         edges_upd = self.update_edge_fn(feat_in)
-        edges = edges.at[:, non_diag_edge_idx].set(edges_upd)
+        edges = edges.at[:, non_diag_edge_idx].set(edges_upd, mode='drop')
         return edges
 
 class MessagePassingWithDot(MessagePassing):
