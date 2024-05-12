@@ -13,7 +13,7 @@ def llt_loss(L, x, b):
     "L should be sparse (and not batched since function is vmaped)"
     return jnp.square(jnp.linalg.norm(L @ (L.T @ x) - b, ord=2))
 
-def compute_loss_llt(model, X, y, reduction=jnp.sum):
+def compute_loss_llt(model, X, y, reduction=jnp.mean):
     '''Placeholder for supervised learning `y`.
        Positions in `X`:
          X[0] - lhs A (for cond calc).
@@ -28,7 +28,7 @@ def compute_loss_llt(model, X, y, reduction=jnp.sum):
     loss = vmap(llt_loss, in_axes=(0, 0, 0), out_axes=(0))(L, X[4], X[2])
     return reduction(loss)
 
-def compute_loss_llt_with_cond(model, X, y, repeat_step, reduction=jnp.sum):
+def compute_loss_llt_with_cond(model, X, y, repeat_step, reduction=jnp.mean):
     '''Argument `repeat_step` is for ignoring duplicating lhs and rhs when Krylov dataset is used.'''
     nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(X[1], X[2])
     lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(X[0], X[2])
