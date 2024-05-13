@@ -182,12 +182,14 @@ def load_pde_data(pde, grid, variance, lhs_type, return_train, N_samples=1000, f
         get_linsystem_pad = partial(pad_lhs_ILUp, p=1)
     elif lhs_type == 'ilu2':
         get_linsystem_pad = partial(pad_lhs_ILUp, p=2)
+    elif lhs_type == 'l_ilu0':
+        get_linsystem_pad = partial(pad_lhs_LfromILUp, p=0)
     elif lhs_type == 'ict':
         assert isinstance(fill_factor, int) and isinstance(threshold, float)
         get_linsystem_pad = partial(pad_lhs_ICt, fill_factor=fill_factor, threshold=threshold)
     elif lhs_type == 'l_ict':
         assert isinstance(fill_factor, int) and isinstance(threshold, float)
-        get_linsystem_pad = partial(pad_lhs_ICt, fill_factor=fill_factor, threshold=threshold)
+        get_linsystem_pad = partial(pad_lhs_LfromICt, fill_factor=fill_factor, threshold=threshold)
     elif lhs_type == 'a_pow':
         assert isinstance(power, int) and power >= 2
         get_linsystem_pad = partial(pad_lhs_power, power=power)
@@ -200,8 +202,8 @@ def load_pde_data(pde, grid, variance, lhs_type, return_train, N_samples=1000, f
         file = jnp.load(os.path.join(data_dir, name+'_test.npz'))
     file['Aval']
     A = vmap(make_BCOO, in_axes=(0, 0, None), out_axes=(0))(file['Aval'], file['Aind'], grid)[:N_samples, ...]
-    b = jnp.asarray(file['b'])[:N_samples, ...]
-    x = jnp.asarray(file['x'])[:N_samples, ...]
+    b = jnp.asarray(file['b'])[0:N_samples, ...]
+    x = jnp.asarray(file['x'])[0:N_samples, ...]
     A_pad, bi_edges = get_linsystem_pad(A, b)
     return A, A_pad, b, x, bi_edges
     
@@ -221,6 +223,19 @@ def pad_lhs_ILUp(A, b, p, *args):
     for n in range(N):
         L, U = factorsILUp(jBCOO_to_scipyCSR(A[n, ...]), p=p)
         A_pad.append(jsparse.BCOO.from_scipy_sparse(L @ U).sort_indices()[None, ...])
+    A_pad = device_put(jsparse.bcoo_concatenate(A_pad, dimension=0))
+    
+    _, _, receivers, senders, n_node = direc_graph_from_linear_system_sparse(A_pad, b)
+    bi_edges = bi_direc_indx(receivers[0, ...], senders[0, ...], n_node[1]) 
+    bi_edges = jnp.repeat(bi_edges[None, ...], n_node[0], axis=0)
+    return A_pad, bi_edges
+
+def pad_lhs_LfromILUp(A, b, p, *args):
+    N = A.shape[0]
+    A_pad = []
+    for n in range(N):
+        L = ilupp.ichol0(jBCOO_to_scipyCSR(A[n, ...]))
+        A_pad.append(jsparse.BCOO.from_scipy_sparse(L + triu(L.T, k=1)).sort_indices()[None, ...])
     A_pad = device_put(jsparse.bcoo_concatenate(A_pad, dimension=0))
     
     _, _, receivers, senders, n_node = direc_graph_from_linear_system_sparse(A_pad, b)
@@ -263,14 +278,37 @@ def pad_lhs_ICt(A, b, fill_factor, threshold, *args):
     return A_pad, bi_edges
 
 def pad_lhs_LfromICt(A, b, fill_factor, threshold, *args):
-    assert False
-    
     N = A.shape[0]
     A_pad = []
+    bi_edges = []
+    max_len, max_len_biedg = 0, 0
+
     for n in range(N):
         L = ilupp.icholt(jBCOO_to_scipyCSR(A[n, ...]), add_fill_in=fill_factor, threshold=threshold)
-        A_pad.append(jsparse.BCOO.from_scipy_sparse(L + triu(L.T, k=1)).sort_indices()[None, ...])
+        A_pad.append(jsparse.BCOO.from_scipy_sparse(L + triu(L.T, k=1)).sort_indices())
+        _, _, receivers, senders, n_node = direc_graph_from_linear_system_sparse(A_pad[n][None, ...], b)
+        bi_edges.append(bi_direc_indx(receivers[0, ...], senders[0, ...], n_node[1]))
+        
+        len_i = A_pad[-1].data.shape[0]
+        len_biedg_i = bi_edges[-1].shape[0]
+        max_len = len_i if len_i > max_len else max_len
+        max_len_biedg = len_biedg_i if len_biedg_i > max_len_biedg else max_len_biedg
+        
+    for n in range(N):
+        A_pad_i = A_pad[n]
+        bi_edge_i = bi_edges[n]
+        delta_len = max_len - A_pad_i.data.shape[0]
+        delta_biedg_len = max_len_biedg - bi_edge_i.shape[0]
+        
+        A_pad_i.data = jnp.pad(A_pad_i.data, (0, delta_len), mode='constant', constant_values=(0))
+        A_pad_i.indices = jnp.pad(A_pad_i.indices, [(0, delta_len), (0, 0)], mode='constant', constant_values=(A_pad_i.data.shape[0]))
+        bi_edge_i = jnp.pad(bi_edge_i, [(0, delta_biedg_len), (0, 0)], mode='constant', constant_values=(A_pad_i.data.shape[0]))
+
+        A_pad[n] = A_pad_i[None, ...]
+        bi_edges[n] = bi_edge_i[None, ...]
+        
     A_pad = device_put(jsparse.bcoo_concatenate(A_pad, dimension=0))
+    bi_edges = device_put(jnp.concatenate(bi_edges, axis=0))
     return A_pad, bi_edges
 
 def pad_lhs_power(A, b, power, *args):
