@@ -37,21 +37,13 @@ def training_search(config_ls, folder):
 
 def case_train(path, config, meta_data_df):
     # Data params
-    dataset, grid = config['dataset'], config['grid'] 
+    pde, grid, variance = config['pde'], config['grid'], config['variance']
     N_samples_train, N_samples_test = config['N_samples_train'], config['N_samples_test']
-    
-    rhs_train = rhs_test = config['rhs_train']
-    k_train = k_test = config['k_train']
-
-    rhs_offset_train = rhs_offset_test = config['rhs_offset_train']
-    k_offset_train = k_offset_test = config['k_offset_train']
-    
     lhs_type = config['lhs_type']
-    cg_repeats = config['cg_repeats']
-    if dataset == 'simple': cg_repeats = 1
+    cg_repeats = 1
     
     # Train params
-    loss_type, loss_reduction = config['loss_type'], config['loss_reduction']
+    loss_type = 'llt'
     batch_size, epoch_num = config['batch_size'], config['epoch_num']
     lr_start, schedule_params = config['lr_start'], config['schedule_params']
     train_config = {
@@ -67,14 +59,8 @@ def case_train(path, config, meta_data_df):
     cg_valid_repeats = config['cg_valid_repeats']
     
     # Get model
-    model = get_default_model()
-
-    # If loss type and dataset type are coherent?
-    if (loss_type in {'notay', 'llt-res', 'llt-res-norm'} and dataset == 'simple') or (loss_type in {'llt', 'llt-norm'} and dataset == 'krylov'):
-        print('Skip this run: "loss_type" and "dataset" is not compitable.')
-        return meta_data_df
-#         raise ValueError('Not valid dataset for a chosen loss')
-
+    model = get_default_corrector_model()
+    
     # Setup schedule if need one
     if schedule_params != None:
         assert len(schedule_params) == 4
@@ -91,29 +77,14 @@ def case_train(path, config, meta_data_df):
     # Generate dataset and iniput data
     try:
         s = perf_counter()
-        if dataset == 'krylov':
-            A_train, A_pad_train, b_train, u_exact_train, bi_edges_train, res_train, u_app_train = dataset_Krylov(grid, N_samples_train, seed=42, rhs_distr=rhs_train, rhs_offset=rhs_offset_train,
-                                                                                                     k_distr=k_train, k_offset=k_offset_train, cg_repeats=cg_repeats, lhs_type=lhs_type)
-            A_test, A_pad_test, b_test, u_exact_test, bi_edges_test, res_test, u_app_test = dataset_Krylov(grid, N_samples_test, seed=43, rhs_distr=rhs_test, rhs_offset=rhs_offset_test,
-                                                                                               k_distr=k_test, k_offset=k_offset_test, cg_repeats=cg_repeats, lhs_type=lhs_type)
-            data = (
-                [A_train, A_pad_train, b_train, bi_edges_train, u_exact_train, res_train, u_app_train],
-                [A_test, A_pad_test, b_test, bi_edges_test, u_exact_test, res_test, u_app_test],
-                jnp.array([1]), jnp.array([1])
-            )
-        elif dataset == 'simple':
-            A_train, A_pad_train, b_train, u_exact_train, bi_edges_train = dataset_FD(grid, N_samples_train, seed=42, rhs_distr=rhs_train, rhs_offset=rhs_offset_train,
-                                                                         k_distr=k_train, k_offset=k_offset_train, lhs_type=lhs_type)
-            A_test, A_pad_test, b_test, u_exact_test, bi_edges_test = dataset_FD(grid, N_samples_test, seed=43, rhs_distr=rhs_test, rhs_offset=rhs_offset_test,
-                                                                     k_distr=k_test, k_offset=k_offset_test, lhs_type=lhs_type)
-            data = (
+        A_train, A_pad_train, b_train, u_exact_train, bi_edges_train = dataset_qtt(pde, grid, variance, lhs_type, return_train=True, N_samples=N_samples_train, fill_factor=1, threshold=1e-4)
+        A_test, A_pad_test, b_test, u_exact_test, bi_edges_test = dataset_qtt(pde, grid, variance, lhs_type, return_train=False, N_samples=N_samples_test, fill_factor=1, threshold=1e-4)
+        dt_data = perf_counter() - s
+        data = (
                 [A_train, A_pad_train, b_train, bi_edges_train, u_exact_train],
                 [A_test, A_pad_test, b_test, bi_edges_test, u_exact_test],
                 jnp.array([1]), jnp.array([1])
-            )
-        else:
-            raise ValueError('Invalid dataset type')
-        dt_data = perf_counter() - s
+        )
     except:
         return meta_data_df
         
@@ -124,20 +95,21 @@ def case_train(path, config, meta_data_df):
     # Train the model
     try:
         s = perf_counter()
-        model, losses = train(model, data, train_config, loss_name=loss_type, repeat_step=cg_repeats)
+        model, losses = train(model, data, train_config, loss_name=loss_type, repeat_step=cg_repeats, with_cond=with_cond)
         dt_train = perf_counter() - s
     except:
         print('Skip this run on training step')
         return meta_data_df
     
     # Make L for prec and clean memory
+    alpha = model.alpha.item()
     L = vmap(model, in_axes=(0, 0, 0, 0, 0), out_axes=(0))(*direc_graph_from_linear_system_sparse(A_pad_test[::cg_repeats, ...], b_test[::cg_repeats, ...])[:-1], bi_edges_test[::cg_repeats, ...])
     del model, data, A_train, A_pad_train, b_train, u_exact_train, bi_edges_train, A_pad_test, bi_edges_test
     if dataset == 'krylov': del res_train, res_test, u_app_train, u_app_test
     clear_caches()
     
     # Not preconditioned CG
-    _, res_I = ConjGrad(A_test[::cg_repeats, ...], b_test[::cg_repeats, ...], N_iter=cg_valid_repeats, prec_func=None, seed=42)
+    _, res_I = ConjGrad(A_test[::cg_repeats, ...], b_test[::cg_repeats, ...], N_iter=1000, prec_func=None, seed=42)
     res_I = jnp.linalg.norm(res_I, axis=1).mean(0)
     
     # PCG
@@ -160,22 +132,19 @@ def case_train(path, config, meta_data_df):
         
     res_steps_I = iter_per_residual(res_I)    
     res_steps_LLT = iter_per_residual(res_LLT)
-    params_to_save = [dataset, grid, N_samples_train, N_samples_test, rhs_train, rhs_test, k_train, k_test,
-                      rhs_offset_train, rhs_offset_test, k_offset_train, k_offset_test, lhs_type, cg_repeats,
-                      loss_type, loss_reduction.split(' ')[1], batch_size, epoch_num, lr_start, schedule_params, cg_valid_repeats,
-                      losses[0][-1], losses[1][-1], losses[2][-1], cond_A, *res_steps_I.values(), *res_steps_LLT.values(),
-                      dt_data, dt_train, dt_prec_cg]
+    params_to_save = [pde, grid, variance, N_samples_train, N_samples_test, lhs_type batch_size, epoch_num, lr_start, schedule_params,
+                      cg_valid_repeats, losses[0][-1], losses[1][-1], losses[2][-1], cond_A, alpha, *res_steps_I.values(),
+                      *res_steps_LLT.values(), dt_data, dt_train, dt_prec_cg]
     
     meta_data_df = save_meta_params(meta_data_df, params_to_save, run_name)
     jnp.savez(os.path.join(path, run_name + '.npz'), losses=losses, res_I=res_I, res_LLT=res_LLT)
     return meta_data_df
 
 def save_meta_params(df, params_values, run_name):
-    params_names = ['dataset', 'grid', 'N_samples_train', 'N_samples_test', 'rhs_train', 'rhs_test', 'k_train', 'k_test',
-                      'rhs_offset_train', 'rhs_offset_test', 'k_offset_train', 'k_offset_test', 'lhs_type', 'cg_repeats',
-                      'loss_type', 'loss_reduction', 'batch_size', 'epoch_num', 'lr_start', 'schedule_params', 'cg_valid_repeats',
-                      'train_loss', 'test_loss', 'cond_prec_system', 'cond_initial_system', 'cg_I_1e_3', 'cg_I_1e_6', 'cg_I_1e_12',
-                      'cg_LLT_1e_3', 'cg_LLT_1e_6', 'cg_LLT_1e_12', 'time_data', 'time_train', 'time_pcg']
+    params_names = ['pde', 'grid', 'variance', 'N_samples_train', 'N_samples_test', 'lhs_type', 'batch_size', 'epoch_num', 'lr_start',
+                    'schedule_params', 'cg_valid_repeats', 'train_loss_last', 'test_loss_last', 'cond_prec_system', 'cond_initial_system',
+                    'alpha', 'cg_1e_3', 'cg_1e_6', 'cg_1e_9', 'cg_1e_12','pcg_1e_3', 'pcg_1e_6', 'pcg_1e_9', 'pcg_1e_12',
+                    'time_data', 'time_train', 'time_pcg']
     for n, v in zip(params_names, params_values):
         df.loc[run_name, n] = str(v)
     return df
@@ -193,4 +162,20 @@ def get_default_model(seed=42):
     )
     model = PrecNet(NodeEncoder=NodeEncoder, EdgeEncoder=EdgeEncoder, 
                     EdgeDecoder=EdgeDecoder, MessagePass=MessagePass)
+    return model
+
+def get_default_corrector_model(seed=42):
+    NodeEncoder = FullyConnectedNet(features=[1, 16, 16], N_layers=2, key=random.PRNGKey(seed), layer_=Conv1d)
+    EdgeEncoder = FullyConnectedNet(features=[1, 16, 16], N_layers=2, key=random.PRNGKey(seed), layer_=Conv1d)
+    EdgeDecoder = FullyConnectedNet(features=[16, 16, 1], N_layers=2, key=random.PRNGKey(seed), layer_=Conv1d)
+
+    mp_rounds = 5
+    MessagePass = MessagePassing(
+        update_edge_fn = FullyConnectedNet(features=[48, 16, 16], N_layers=2, key=random.PRNGKey(seed), layer_=Conv1d),    
+        update_node_fn = FullyConnectedNet(features=[32, 16, 16], N_layers=2, key=random.PRNGKey(seed), layer_=Conv1d),
+        mp_rounds=mp_rounds
+    )
+    model = CorrectionNet(NodeEncoder=NodeEncoder, EdgeEncoder=EdgeEncoder, 
+                          EdgeDecoder=EdgeDecoder, MessagePass=MessagePass,
+                          alpha=jnp.array([0.]))
     return model

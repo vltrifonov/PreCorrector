@@ -53,7 +53,7 @@ class CorrectionNet(eqx.Module):
         edges = self.EdgeDecoder(edges)[0, ...]
         
         edges = edges * norm
-        edges = edges.at[diag_edge_indx].set(jnp.sqrt(diag_edge), mode='drop')         # Put the real diagonal into trained lhs
+#         edges = edges.at[diag_edge_indx].set(jnp.sqrt(diag_edge), mode='drop')         # Put the real diagonal into trained lhs
         edges = edges_init + self.alpha * edges
         
         nodes, edges, receivers, senders = graph_tril(nodes, jnp.squeeze(edges), receivers, senders)
