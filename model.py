@@ -22,13 +22,13 @@ class CorrectionNet(eqx.Module):
     EdgeDecoder: eqx.Module
     alpha: jax.Array
 
-    def __init__(self, NodeEncoder, EdgeEncoder, MessagePass, EdgeDecoder):
+    def __init__(self, NodeEncoder, EdgeEncoder, MessagePass, EdgeDecoder, alpha):
         super(CorrectionNet, self).__init__()
         self.NodeEncoder = NodeEncoder
         self.EdgeEncoder = EdgeEncoder
         self.MessagePass = MessagePass
         self.EdgeDecoder = EdgeDecoder
-        self.alpha = jnp.array([0.])
+        self.alpha = alpha
         return    
     
     def __call__(self, train_graph, bi_edges_indx, lhs_graph):
@@ -52,12 +52,9 @@ class CorrectionNet(eqx.Module):
         edges = bi_direc_edge_avg(edges, bi_edges_indx)
         edges = self.EdgeDecoder(edges)[0, ...]
         
-        # Put the real diagonal into trained lhs
         edges = edges * norm
-        edges = edges.at[diag_edge_indx].set(jnp.sqrt(diag_edge), mode='drop')
+        edges = edges.at[diag_edge_indx].set(jnp.sqrt(diag_edge), mode='drop')         # Put the real diagonal into trained lhs
         edges = edges_init + self.alpha * edges
-#         edges = self.alpha * edges
-#         edges = edges.at[diag_edge_indx].set(jnp.sqrt(diag_edge), mode='drop')        
         
         nodes, edges, receivers, senders = graph_tril(nodes, jnp.squeeze(edges), receivers, senders)
         low_tri = graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders)

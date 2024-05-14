@@ -18,7 +18,7 @@ from loss.inv_prec_loss import compute_loss_inv_prec, compute_loss_inv_prec_with
 from loss.inv_prec_rhs_loss import compute_loss_inv_prec_rhs, compute_loss_inv_prec_rhs_with_cond
 from utils import batch_indices
 
-def train(model, data, train_config, loss_name, key=42, repeat_step=1):
+def train(model, data, train_config, loss_name, key=42, repeat_step=1, with_cond=True):
     assert isinstance(train_config, dict)
     assert isinstance(data, Iterable)
     assert len(data) == 4
@@ -34,7 +34,10 @@ def train(model, data, train_config, loss_name, key=42, repeat_step=1):
     
     if loss_name == 'llt':
         compute_loss = partial(compute_loss_llt, reduction=reduction)
-        compute_loss_cond = partial(compute_loss_llt_with_cond, repeat_step=repeat_step, reduction=reduction)
+        if with_cond:
+            compute_loss_cond = partial(compute_loss_llt_with_cond, repeat_step=repeat_step, reduction=reduction)
+        else:
+            compute_loss_cond = lambda model, X, y: (compute_loss(model, X, y), 1)           
 #     elif loss_name == 'notay':
 #         compute_loss = partial(compute_loss_notay, reduction=reduction)
 #         compute_loss_cond = partial(compute_loss_notay_with_cond, repeat_step=repeat_step, reduction=reduction)
