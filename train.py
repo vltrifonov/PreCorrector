@@ -16,6 +16,7 @@ from loss.right_inv_loss import compute_loss_right_inv, compute_loss_right_inv_w
 from loss.mid_inv_loss import compute_loss_mid_inv, compute_loss_mid_inv_with_cond
 from loss.inv_prec_loss import compute_loss_inv_prec, compute_loss_inv_prec_with_cond
 from loss.inv_prec_rhs_loss import compute_loss_inv_prec_rhs, compute_loss_inv_prec_rhs_with_cond
+from loss.llt_minus_A_loss import compute_loss_llt_minus_A, compute_loss_llt_minus_A_with_cond
 from utils import batch_indices
 
 def train(model, data, train_config, loss_name, key=42, repeat_step=1, with_cond=True):
@@ -29,42 +30,47 @@ def train(model, data, train_config, loss_name, key=42, repeat_step=1, with_cond
     optim = train_config['optimizer'](train_config['lr'], **train_config['optim_params'])
     opt_state = optim.init(eqx.filter(model, eqx.is_array))
     batch_size = train_config['batch_size']
-    reduction = train_config['loss_reduction']
     assert len(X_train[1]) >= batch_size, 'Batch size is greater than the dataset size'
     
     if loss_name == 'llt':
-        compute_loss = partial(compute_loss_llt, reduction=reduction)
+        compute_loss = partial(compute_loss_llt)
         if with_cond:
-            compute_loss_cond = partial(compute_loss_llt_with_cond, repeat_step=repeat_step, reduction=reduction)
+            compute_loss_cond = partial(compute_loss_llt_with_cond, repeat_step=repeat_step, )
         else:
-            compute_loss_cond = lambda model, X, y: (compute_loss(model, X, y), 1)           
+            compute_loss_cond = lambda model, X, y: (compute_loss(model, X, y), 1)  
+    elif loss_name == 'llt_minus_A':
+        compute_loss = partial(compute_loss_llt_minus_A)
+        if with_cond:
+            compute_loss_cond = partial(compute_loss_llt_minus_A_with_cond, repeat_step=repeat_step, )
+        else:
+            compute_loss_cond = lambda model, X, y: (compute_loss(model, X, y), 1)  
 #     elif loss_name == 'notay':
-#         compute_loss = partial(compute_loss_notay, reduction=reduction)
-#         compute_loss_cond = partial(compute_loss_notay_with_cond, repeat_step=repeat_step, reduction=reduction)
+#         compute_loss = partial(compute_loss_notay, )
+#         compute_loss_cond = partial(compute_loss_notay_with_cond, repeat_step=repeat_step, )
 #     elif loss_name == 'llt-norm':
-#         compute_loss = partial(compute_loss_llt_norm, reduction=reduction)
-#         compute_loss_cond = partial(compute_loss_llt_norm_with_cond, repeat_step=repeat_step, reduction=reduction)
-    elif loss_name == 'llt-res':
-        compute_loss = partial(compute_loss_lltres, reduction=reduction)
-        compute_loss_cond = partial(compute_loss_lltres_with_cond, repeat_step=repeat_step, reduction=reduction)
+#         compute_loss = partial(compute_loss_llt_norm)
+#         compute_loss_cond = partial(compute_loss_llt_norm_with_cond, repeat_step=repeat_step)
+#     elif loss_name == 'llt-res':
+#         compute_loss = partial(compute_loss_lltres)
+#         compute_loss_cond = partial(compute_loss_lltres_with_cond, repeat_step=repeat_step)
 #     elif loss_name == 'llt-res-norm':
-#         compute_loss = partial(compute_loss_lltres_norm, reduction=reduction)
-#         compute_loss_cond = partial(compute_loss_lltres_norm_with_cond, repeat_step=repeat_step, reduction=reduction)
+#         compute_loss = partial(compute_loss_lltres_norm)
+#         compute_loss_cond = partial(compute_loss_lltres_norm_with_cond, repeat_step=repeat_step)
 #     elif loss_name == 'right-inv':
-#         compute_loss = partial(compute_loss_right_inv, reduction=reduction)
-#         compute_loss_cond = partial(compute_loss_right_inv_with_cond, repeat_step=repeat_step, reduction=reduction)
+#         compute_loss = partial(compute_loss_right_inv)
+#         compute_loss_cond = partial(compute_loss_right_inv_with_cond, repeat_step=repeat_step)
 #     elif loss_name == 'left-inv':
-#         compute_loss = partial(compute_loss_left_inv, reduction=reduction)
-#         compute_loss_cond = partial(compute_loss_left_inv_with_cond, repeat_step=repeat_step, reduction=reduction)
+#         compute_loss = partial(compute_loss_left_inv)
+#         compute_loss_cond = partial(compute_loss_left_inv_with_cond, repeat_step=repeat_step)
 #     elif loss_name == 'mid-inv':
-#         compute_loss = partial(compute_loss_mid_inv, reduction=reduction)
-#         compute_loss_cond = partial(compute_loss_mid_inv_with_cond, repeat_step=repeat_step, reduction=reduction)
-    elif loss_name == 'inv-prec':
-        compute_loss = partial(compute_loss_inv_prec, reduction=reduction)
-        compute_loss_cond = partial(compute_loss_inv_prec_with_cond, repeat_step=repeat_step, reduction=reduction)
-    elif loss_name == 'inv-prec-rhs':
-        compute_loss = partial(compute_loss_inv_prec_rhs, reduction=reduction)
-        compute_loss_cond = partial(compute_loss_inv_prec_rhs_with_cond, repeat_step=repeat_step, reduction=reduction)
+#         compute_loss = partial(compute_loss_mid_inv)
+#         compute_loss_cond = partial(compute_loss_mid_inv_with_cond, repeat_step=repeat_step)
+#     elif loss_name == 'inv-prec':
+#         compute_loss = partial(compute_loss_inv_prec)
+#         compute_loss_cond = partial(compute_loss_inv_prec_with_cond, repeat_step=repeat_step)
+#     elif loss_name == 'inv-prec-rhs':
+#         compute_loss = partial(compute_loss_inv_prec_rhs)
+#         compute_loss_cond = partial(compute_loss_inv_prec_rhs_with_cond, repeat_step=repeat_step)
     else:
         raise ValueError('Invalid loss name.')
     compute_loss_and_grads = eqx.filter_value_and_grad(compute_loss)

@@ -160,7 +160,7 @@ def load_pde_data(pde, grid, variance, lhs_type, return_train, N_samples=1000, f
         name = pde
     else:
         raise ValueError('Invalid PDE name.')
-    if grid in {32, 64, 128}:
+    if grid in {32, 64, 128, 256}:
         name += str(grid)
     else:
         raise ValueError('Invalid grid size.')
@@ -176,23 +176,23 @@ def load_pde_data(pde, grid, variance, lhs_type, return_train, N_samples=1000, f
     
     if lhs_type == 'fd':
         get_linsystem_pad = pad_lhs_FD
-    elif lhs_type == 'ilu0':
-        get_linsystem_pad = partial(pad_lhs_ILUp, p=0)
-    elif lhs_type == 'ilu1':
-        get_linsystem_pad = partial(pad_lhs_ILUp, p=1)
-    elif lhs_type == 'ilu2':
-        get_linsystem_pad = partial(pad_lhs_ILUp, p=2)
+#     elif lhs_type == 'ilu0':
+#         get_linsystem_pad = partial(pad_lhs_ILUp, p=0)
+#     elif lhs_type == 'ilu1':
+#         get_linsystem_pad = partial(pad_lhs_ILUp, p=1)
+#     elif lhs_type == 'ilu2':
+#         get_linsystem_pad = partial(pad_lhs_ILUp, p=2)
     elif lhs_type == 'l_ilu0':
         get_linsystem_pad = partial(pad_lhs_LfromILUp, p=0)
-    elif lhs_type == 'ict':
-        assert isinstance(fill_factor, int) and isinstance(threshold, float)
-        get_linsystem_pad = partial(pad_lhs_ICt, fill_factor=fill_factor, threshold=threshold)
+#     elif lhs_type == 'ict':
+#         assert isinstance(fill_factor, int) and isinstance(threshold, float)
+#         get_linsystem_pad = partial(pad_lhs_ICt, fill_factor=fill_factor, threshold=threshold)
     elif lhs_type == 'l_ict':
         assert isinstance(fill_factor, int) and isinstance(threshold, float)
         get_linsystem_pad = partial(pad_lhs_LfromICt, fill_factor=fill_factor, threshold=threshold)
-    elif lhs_type == 'a_pow':
-        assert isinstance(power, int) and power >= 2
-        get_linsystem_pad = partial(pad_lhs_power, power=power)
+#     elif lhs_type == 'a_pow':
+#         assert isinstance(power, int) and power >= 2
+#         get_linsystem_pad = partial(pad_lhs_power, power=power)
     else:
         raise ValueError('Invalid lhs type.')
     
@@ -201,7 +201,7 @@ def load_pde_data(pde, grid, variance, lhs_type, return_train, N_samples=1000, f
     else:
         file = jnp.load(os.path.join(data_dir, name+'_test.npz'))
     file['Aval']
-    A = vmap(make_BCOO, in_axes=(0, 0, None), out_axes=(0))(file['Aval'], file['Aind'], grid)[:N_samples, ...]
+    A = vmap(make_BCOO, in_axes=(0, 0, None), out_axes=(0))(file['Aval'], file['Aind'], grid)[0:N_samples, ...]
     b = jnp.asarray(file['b'])[0:N_samples, ...]
     x = jnp.asarray(file['x'])[0:N_samples, ...]
     A_pad, bi_edges = get_linsystem_pad(A, b)

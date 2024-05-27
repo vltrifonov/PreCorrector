@@ -94,13 +94,14 @@ def batchedILUp(A, p):
 def id_generator(size=6, chars=string.ascii_lowercase + string.digits):
     return ''.join(simple_random.choice(chars) for _ in range(size))
 
-def parse_run(dir_name, run_name, figsize=(14, 14)):
+def parse_run(dir_name, run_name, figsize=(14, 14), with_cond=True):
     assert isinstance(run_name, Iterable)
     path = '/mnt/local/data/vtrifonov/prec-learning-Notay-loss/results_cases'
     pd.set_option('display.max_columns', 500)
     
     df = pd.read_csv(os.path.join(path, dir_name, 'meta_data.csv'), index_col=0)
-    _, axes = plt.subplots(len(run_name), 3, figsize=figsize)
+    axes_num = 3 if with_cond else 2
+    _, axes = plt.subplots(len(run_name), axes_num, figsize=figsize)
     if len(run_name) == 1:
         axes = np.expand_dims(axes, 0)
     
@@ -114,22 +115,23 @@ def parse_run(dir_name, run_name, figsize=(14, 14)):
         axes[i, 0].set_xlabel('Epoch')
         axes[i, 0].set_ylabel('Loss')
         axes[i, 0].grid()
+        axes[i, 0].set_title(n)
         
-        axes[i, 1].plot(range(len(run['losses'][0])), run['losses'][2], label='Test')
-        axes[i, 1].legend()
-        axes[i, 1].set_yscale('log')
-        axes[i, 1].set_xlabel('Epoch')
-        axes[i, 1].set_ylabel('Cond $P^{-1}A$')
-        axes[i, 1].grid()
-        axes[i, 1].set_title(n)
+        axes[i, -1].plot(range(len(run['res_I'])), run['res_I'], label="CG")
+        axes[i, -1].plot(range(len(run['res_LLT'])), run['res_LLT'], label="PCG")
+        axes[i, -1].legend()
+        axes[i, -1].set_yscale('log')
+        axes[i, -1].set_xlabel('Iteration')
+        axes[i, -1].set_ylabel('$\|res\|$')
+        axes[i, -1].grid()
         
-        axes[i, 2].plot(range(len(run['res_I'])), run['res_I'], label="CG")
-        axes[i, 2].plot(range(len(run['res_LLT'])), run['res_LLT'], label="PCG")
-        axes[i, 2].legend()
-        axes[i, 2].set_yscale('log')
-        axes[i, 2].set_xlabel('Iteration')
-        axes[i, 2].set_ylabel('$\|res\|$')
-        axes[i, 2].grid()
+        if with_cond:
+            axes[i, 1].plot(range(len(run['losses'][0])), run['losses'][2], label='Test')
+            axes[i, 1].legend()
+            axes[i, 1].set_yscale('log')
+            axes[i, 1].set_xlabel('Epoch')
+            axes[i, 1].set_ylabel('Cond $P^{-1}A$')
+            axes[i, 1].grid()
         
     display(df.loc[run_name, :])
     plt.tight_layout()
