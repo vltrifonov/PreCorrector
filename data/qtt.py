@@ -155,7 +155,11 @@ def make_BCOO(Aval, Aind, N_points):
     return jsparse.BCOO((Aval, Aind), shape=(N_points**2, N_points**2))
 
 def load_pde_data(pde, grid, variance, lhs_type, return_train, N_samples=1000, fill_factor=None, threshold=None, power=None,
-                  cov_model='Gauss', data_dir='/mnt/local/data/vtrifonov/prec-learning-Notay-loss/paper_datasets'):
+                  cov_model='Gauss', precision='f32'):
+    assert precision in {'f32', 'f64'}
+    
+    data_dir = 'paper_datasets' if precision == 'f32' else 'paper_datasets_f64'
+    data_dir = os.path.join('/mnt/local/data/vtrifonov/prec-learning-Notay-loss', data_dir)
     if pde == 'poisson' or pde == 'div_k_grad':
         name = pde
     else:
@@ -190,9 +194,9 @@ def load_pde_data(pde, grid, variance, lhs_type, return_train, N_samples=1000, f
     elif lhs_type == 'l_ict':
         assert isinstance(fill_factor, int) and isinstance(threshold, float)
         get_linsystem_pad = partial(pad_lhs_LfromICt, fill_factor=fill_factor, threshold=threshold)
-#     elif lhs_type == 'a_pow':
-#         assert isinstance(power, int) and power >= 2
-#         get_linsystem_pad = partial(pad_lhs_power, power=power)
+    elif lhs_type == 'a_pow':
+        assert isinstance(power, int) and power >= 2
+        get_linsystem_pad = partial(pad_lhs_power, power=power)
     else:
         raise ValueError('Invalid lhs type.')
     
@@ -217,18 +221,18 @@ def pad_lhs_FD(A, b, *args):
     bi_edges = jnp.repeat(bi_edges[None, ...], n_node[0], axis=0)
     return A_pad, bi_edges
 
-def pad_lhs_ILUp(A, b, p, *args):
-    N = A.shape[0]
-    A_pad = []
-    for n in range(N):
-        L, U = factorsILUp(jBCOO_to_scipyCSR(A[n, ...]), p=p)
-        A_pad.append(jsparse.BCOO.from_scipy_sparse(L @ U).sort_indices()[None, ...])
-    A_pad = device_put(jsparse.bcoo_concatenate(A_pad, dimension=0))
+# def pad_lhs_ILUp(A, b, p, *args):
+#     N = A.shape[0]
+#     A_pad = []
+#     for n in range(N):
+#         L, U = factorsILUp(jBCOO_to_scipyCSR(A[n, ...]), p=p)
+#         A_pad.append(jsparse.BCOO.from_scipy_sparse(L @ U).sort_indices()[None, ...])
+#     A_pad = device_put(jsparse.bcoo_concatenate(A_pad, dimension=0))
     
-    _, _, receivers, senders, n_node = direc_graph_from_linear_system_sparse(A_pad, b)
-    bi_edges = bi_direc_indx(receivers[0, ...], senders[0, ...], n_node[1]) 
-    bi_edges = jnp.repeat(bi_edges[None, ...], n_node[0], axis=0)
-    return A_pad, bi_edges
+#     _, _, receivers, senders, n_node = direc_graph_from_linear_system_sparse(A_pad, b)
+#     bi_edges = bi_direc_indx(receivers[0, ...], senders[0, ...], n_node[1]) 
+#     bi_edges = jnp.repeat(bi_edges[None, ...], n_node[0], axis=0)
+#     return A_pad, bi_edges
 
 def pad_lhs_LfromILUp(A, b, p, *args):
     N = A.shape[0]

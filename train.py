@@ -17,6 +17,13 @@ from loss.mid_inv_loss import compute_loss_mid_inv, compute_loss_mid_inv_with_co
 from loss.inv_prec_loss import compute_loss_inv_prec, compute_loss_inv_prec_with_cond
 from loss.inv_prec_rhs_loss import compute_loss_inv_prec_rhs, compute_loss_inv_prec_rhs_with_cond
 from loss.llt_minus_A_loss import compute_loss_llt_minus_A, compute_loss_llt_minus_A_with_cond
+
+from loss.log_kaporin import compute_loss_log_kaporin, compute_loss_log_kaporin_with_cond
+from loss.spai_P_hutch import compute_loss_spai_P_hutch, compute_loss_spai_P_hutch_with_cond
+from loss.spai_Pinv_direct import compute_loss_spai_Pinv_direct, compute_loss_spai_Pinv_direct_with_cond
+from loss.spai_Pinv_hutch import compute_loss_spai_Pinv_hutch, compute_loss_spai_Pinv_hutch_with_cond
+from loss.spai_P_direct import compute_loss_spai_P_direct, compute_loss_spai_P_direct_with_cond
+
 from utils import batch_indices
 
 def train(model, data, train_config, loss_name, key=42, repeat_step=1, with_cond=True):
@@ -44,6 +51,37 @@ def train(model, data, train_config, loss_name, key=42, repeat_step=1, with_cond
             compute_loss_cond = partial(compute_loss_llt_minus_A_with_cond, repeat_step=repeat_step, )
         else:
             compute_loss_cond = lambda model, X, y: (compute_loss(model, X, y), 1)  
+    
+    elif loss_name == 'log_kaporin':
+        compute_loss = partial(compute_loss_log_kaporin)
+        if with_cond:
+            compute_loss_cond = partial(compute_loss_log_kaporin_with_cond, repeat_step=repeat_step, )
+        else:
+            compute_loss_cond = lambda model, X, y: (compute_loss(model, X, y), 1)
+    elif loss_name == 'spai_P_hutch':
+        compute_loss = partial(compute_loss_spai_P_hutch)
+        if with_cond:
+            compute_loss_cond = partial(compute_loss_spai_P_hutch_with_cond, repeat_step=repeat_step, )
+        else:
+            compute_loss_cond = lambda model, X, y: (compute_loss(model, X, y), 1)
+    elif loss_name == 'spai_Pinv_direct':
+        compute_loss = partial(compute_loss_spai_Pinv_direct)
+        if with_cond:
+            compute_loss_cond = partial(compute_loss_spai_Pinv_direct_with_cond, repeat_step=repeat_step, )
+        else:
+            compute_loss_cond = lambda model, X, y: (compute_loss(model, X, y), 1)
+    elif loss_name == 'spai_Pinv_hutch':
+        compute_loss = partial(compute_loss_spai_Pinv_hutch)
+        if with_cond:
+            compute_loss_cond = partial(compute_loss_spai_Pinv_hutch_with_cond, repeat_step=repeat_step, )
+        else:
+            compute_loss_cond = lambda model, X, y: (compute_loss(model, X, y), 1)
+    elif loss_name == 'spai_P_direct':
+        compute_loss = partial(compute_loss_spai_P_direct)
+        if with_cond:
+            compute_loss_cond = partial(compute_loss_spai_P_direct_with_cond, repeat_step=repeat_step, )
+        else:
+            compute_loss_cond = lambda model, X, y: (compute_loss(model, X, y), 1)
 #     elif loss_name == 'notay':
 #         compute_loss = partial(compute_loss_notay, )
 #         compute_loss_cond = partial(compute_loss_notay_with_cond, repeat_step=repeat_step, )
@@ -87,14 +125,20 @@ def train(model, data, train_config, loss_name, key=42, repeat_step=1, with_cond
     def make_val_step(model, X, y):
         loss, cond = compute_loss_cond(model, X, y)
         return loss, cond
+#     def make_val_step(model, ind):
+#         batched_X = [arr[ind, ...] for arr in X_test]
+#         loss, cond = compute_loss_cond(model, batched_X, y_test)
+#         return model, (loss, cond)
     
     def train_body(carry, x):
         model, opt_state = carry
         key = random.PRNGKey(x)
         b = batch_indices(key, X_train[0], batch_size)
+#         b_test = batch_indices(key, X_test[0], batch_size)
         
         carry_inner_init = (model, opt_state)
         (model, opt_state), loss_train = lax.scan(make_step, carry_inner_init, b)
+#         model, (loss_test, cond_test) = lax.scan(make_val_step, model, b_test)
         loss_test, cond_test = make_val_step(model, X_test, y_test)
         return (model, opt_state), [jnp.mean(loss_train), loss_test, cond_test] 
     

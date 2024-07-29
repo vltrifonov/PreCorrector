@@ -5,6 +5,7 @@ import jax.numpy as jnp
 from jax import random, vmap, clear_caches, jit
 import numpy as np
 import pandas as pd
+from jax.experimental import sparse as jsparse
 
 import optax
 from equinox.nn import Conv1d
@@ -12,7 +13,7 @@ import matplotlib.pyplot as plt
 from functools import partial
 from time import perf_counter
 
-from data.dataset import dataset_Krylov, dataset_FD, dataset_qtt
+from data.dataset import dataset_qtt # dataset_Krylov, dataset_FD, 
 from linsolve.cg import ConjGrad
 from linsolve.precond import llt_prec_trig_solve, llt_inv_prec
 from model import MessagePassing, FullyConnectedNet, PrecNet, ConstantConv1d, MessagePassingWithDot, CorrectionNet, PrecNetNorm
@@ -38,13 +39,16 @@ def training_search(config_ls, folder):
 def case_train(path, config, meta_data_df):
     # Data params
     pde, grid, variance = config['pde'], config['grid'], config['variance']
+    precision = config['precision']
     N_samples_train, N_samples_test = config['N_samples_train'], config['N_samples_test']
     lhs_type = config['lhs_type']
     cg_repeats = 1
+    power = config['power']
     
     # Train params
     corrector_net = config['corrector_net']
-    loss_type = 'llt'
+    loss_type = config['loss_type']
+    prec_inverse = config['prec_inverse']
     batch_size, epoch_num = config['batch_size'], config['epoch_num']
     lr_start, schedule_params = config['lr_start'], config['schedule_params']
     train_config = {
@@ -77,14 +81,17 @@ def case_train(path, config, meta_data_df):
     # Generate dataset and iniput data
 #     try:
     s = perf_counter()
-    A_train, A_pad_train, b_train, u_exact_train, bi_edges_train = dataset_qtt(pde, grid, variance, lhs_type, return_train=True, N_samples=N_samples_train, fill_factor=1, threshold=1e-4)
-    A_test, A_pad_test, b_test, u_exact_test, bi_edges_test = dataset_qtt(pde, grid, variance, lhs_type, return_train=False, N_samples=N_samples_test, fill_factor=1, threshold=1e-4)
+    A_train, A_pad_train, b_train, u_exact_train, bi_edges_train = dataset_qtt(pde, grid, variance, lhs_type, return_train=True,
+                                                                               N_samples=N_samples_train, fill_factor=1, threshold=1e-4, precision=precision, power=power)
+    A_test, A_pad_test, b_test, u_exact_test, bi_edges_test = dataset_qtt(pde, grid, variance, lhs_type, return_train=False,
+                                                                          N_samples=N_samples_test, fill_factor=1, threshold=1e-4, precision=precision, power=power)
     dt_data = perf_counter() - s
     data = (
             [A_train, A_pad_train, b_train, bi_edges_train, u_exact_train],
             [A_test, A_pad_test, b_test, bi_edges_test, u_exact_test],
             jnp.array([1]), jnp.array([1])
     )
+        
 #     except:
 #         print('Skip this run on data creation step')
 #         return meta_data_df
@@ -104,11 +111,21 @@ def case_train(path, config, meta_data_df):
     
     # Make L for prec and clean memory
     alpha = model.alpha.item() if corrector_net else -42
-    nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(A_pad_test, b_test)
-    lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(A_test, b_test)
+#     nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(A_pad_test, b_test)
+#     lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(A_test, b_test)
 
-    L = vmap(model, in_axes=((0, 0, 0, 0), 0, (0, 0, 0, 0)), out_axes=(0))((nodes, edges, receivers, senders), bi_edges_test, (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders))
-    del model, data, A_train, A_pad_train, b_train, u_exact_train, bi_edges_train, bi_edges_test
+    del data, A_train, A_pad_train, b_train, u_exact_train, bi_edges_train
+    
+    # INVAID HARDOCDE
+    print("Change this line in 'train_utils.py'")
+    L = []
+    for b in [(0, 50), (50, 100), (100, 150), (150, 200)]:
+        nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(A_pad_test[b[0]:b[1] , ...], b_test[b[0]:b[1] , ...])
+        lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(A_test[b[0]:b[1] , ...], b_test[b[0]:b[1] , ...])
+        L.append(vmap(model, in_axes=((0, 0, 0, 0), 0, (0, 0, 0, 0)), out_axes=(0))((nodes, edges, receivers, senders), bi_edges_test[b[0]:b[1], ...], (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders)))
+    
+    del model, bi_edges_test
+    L = jsparse.bcoo_concatenate(L, dimension=0)
     clear_caches()
     
     # Not preconditioned CG
@@ -116,7 +133,7 @@ def case_train(path, config, meta_data_df):
     res_I = jnp.linalg.norm(res_I, axis=1).mean(0)
     
     # PCG
-    if loss_type != 'inv-prec':
+    if not prec_inverse:
         # P = LL^T
         prec = partial(llt_prec_trig_solve, L=L)
     else:
@@ -126,7 +143,7 @@ def case_train(path, config, meta_data_df):
     _, res_LLT = ConjGrad(A_test[::cg_repeats, ...], b_test[::cg_repeats, ...], N_iter=cg_valid_repeats, prec_func=prec, seed=42)
     dt_prec_cg = perf_counter() - s
     res_LLT = jnp.linalg.norm(res_LLT, axis=1).mean(0)
-    
+        
     # Save run's meta data
     flag = True
     while flag:
@@ -137,7 +154,7 @@ def case_train(path, config, meta_data_df):
     res_steps_LLT = iter_per_residual(res_LLT)
     params_to_save = [pde, grid, variance, N_samples_train, N_samples_test, lhs_type, batch_size, epoch_num, lr_start, schedule_params,
                       cg_valid_repeats, losses[0][-1], losses[1][-1], losses[2][-1], cond_A, alpha, *res_steps_I.values(),
-                      *res_steps_LLT.values(), dt_data, dt_train, dt_prec_cg]
+                      *res_steps_LLT.values(), dt_data, dt_train, dt_prec_cg, precision, prec_inverse, loss_type]
     
     meta_data_df = save_meta_params(meta_data_df, params_to_save, run_name)
     jnp.savez(os.path.join(path, run_name + '.npz'), losses=losses, res_I=res_I, res_LLT=res_LLT)
@@ -147,7 +164,7 @@ def save_meta_params(df, params_values, run_name):
     params_names = ['pde', 'grid', 'variance', 'N_samples_train', 'N_samples_test', 'lhs_type', 'batch_size', 'epoch_num', 'lr_start',
                     'schedule_params', 'cg_valid_repeats', 'train_loss_last', 'test_loss_last', 'cond_prec_system', 'cond_initial_system',
                     'alpha', 'cg_1e_3', 'cg_1e_6', 'cg_1e_9', 'cg_1e_12','pcg_1e_3', 'pcg_1e_6', 'pcg_1e_9', 'pcg_1e_12',
-                    'time_data', 'time_train', 'time_pcg']
+                    'time_data', 'time_train', 'time_pcg', 'precision', 'prec_inverse', 'loss_type']
     for n, v in zip(params_names, params_values):
         df.loc[run_name, n] = str(v)
     return df
