@@ -6,21 +6,21 @@ import inspect
 from utils import jBCOO_to_scipyCSR
 
 def batched_cg_scipy(A, b, P=None, atol=1e-12, maxiter=2000):
-    sol_ls, iters_ls, time_ls = [], [], []
+    sol_ls, res_ls, time_ls = [], [], []
     P = P if P else np.array([None]*A.shape[0])
     
     for i in range(A.shape[0]):
         A_i, b_i, P_i, = A[i, ...], b[i, ...], P[i, ...]
-        solution, res_nonlocal, time_per_iter = cg_scipy(jBCOO_to_scipyCSR(A_i), b_i, P_i, atol=atol, maxiter=maxiter)
+        sol_i, res_i, time_i = cg_scipy(jBCOO_to_scipyCSR(A_i), b_i, P_i, atol=atol, maxiter=maxiter)
         
-        sol_ls.append(solution[None, ...])
-        res_nonlocal.append(iters[None, ...])
-        time_ls.append(time_cg[None, ...])
+        sol_ls.append(sol_i[None, ...])
+        res_ls.append(res_i[None, ...])
+        time_ls.append(time_i[None, ...])
         
     sol_ls = np.concatenate(sol_ls, axis=0)
-    res_nonlocal = np.concatenate(res_nonlocal, axis=0)
+    res_ls = np.concatenate(res_ls, axis=0)
     time_ls = np.concatenate(time_ls, axis=0)    
-    return sol_ls, iters_ls, time_ls
+    return sol_ls, res_ls, time_ls
 
 def cg_scipy(A, b, P, atol, maxiter):
     A_loc = A
