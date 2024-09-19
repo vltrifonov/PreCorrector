@@ -56,6 +56,9 @@ def asses_cond_with_res(A, b, cg, start_epoch=5, end_epoch=10):
     out = vmap(lambda n, d: jnp.power(n/d, 2), in_axes=(0), out_axes=(0))(num, denum)
     return out.mean()
 
+def make_BCOO(Aval, Aind, N_points):
+    return jsparse.BCOO((Aval, Aind), shape=(N_points**2, N_points**2))
+
 def jBCOO_to_scipyCSR(A):
     return coo_matrix((A.data, (A.indices[:, 0], A.indices[:, 1])), shape=A.shape, dtype=np.float64).tocsr()
 
@@ -147,83 +150,3 @@ def read_meta_data(dir_name):
 def df_threshold_residuals(df):
     display(df.loc[:, ['cg_I_1e_3', 'cg_I_1e_6', 'cg_I_1e_12', 'cg_LLT_1e_3', 'cg_LLT_1e_6', 'cg_LLT_1e_12']])
     return
-
-#--------------------------------------------------------------------------------------------------------------
-
-def ILU2(A):
-    '''A is in CSR format'''
-    n = A.shape[0]
-    ija = A.indices
-    sILU = A.data
-    for i in range(1, n):
-        s = ija[i]
-        while ija[s] <= i - 1 and s <= ija[i + 1] - 1:
-            k = ija[s]
-            sILU[s] /= sILU[k]
-            l = ija[i]
-            while l <= ija[i + 1] - 1:
-                if ija[ija[i]] > i:
-                    for g in range(ija[k], ija[k + 1] - 1):
-                        if ija[g] == i:
-                            sILU[i] -= sILU[s] * sILU[g]
-                elif ija[l] > i and ija[l - 1] < i:
-                    for g in range(ija[k], ija[k + 1] - 1):
-                        if ija[g] == i:
-                            sILU[i] -= sILU[s] * sILU[g]
-                if ija[l] >= k + 1:
-                    j = ija[l]
-                    for g in range(ija[k], ija[k + 1] - 1):
-                        if ija[g] == j:
-                            sILU[l] -= sILU[s] * sILU[g]
-                if ija[ija[i + 1] - 1] < i and l == ija[i + 1] - 1:
-                    for g in range(ija[k], ija[k + 1] - 1):
-                        if ija[g] == i:
-                            sILU[i] -= sILU[s] * sILU[g]
-                l += 1
-            s += 1
-    return sILU
-
-def jILU2(A):
-    n = jnp.asarray(A.shape[0])
-    ija = jnp.asarray(A.indices)
-    sILU = jnp.asarray(A.data)
-    
-    def cond(i, sILU):
-        return i < n
-
-    def body(i, sILU):
-        s = ija[i]
-        def inner_cond(s, sILU):
-            return s <= ija[i+1]-1 and ija[ija[s]] <= i-1
-
-        def inner_body(s, sILU):
-            k = ija[s]
-            sILU = sILU.at[s].set(sILU[s] / sILU[k])
-            l = ija[i]
-            def innermost_cond(l, sILU):
-                return l <= ija[i+1]-1
-
-            def innermost_body(l, sILU):
-                if ija[ija[i]] > i:
-                    for g in range(ija[k], ija[k+1]-1):
-                        if ija[g] == i:
-                            sILU = sILU.at[i].set(sILU[i] - sILU[s] * sILU[g])
-                elif ija[l] > i and ija[l-1] < i:
-                    for g in range(ija[k], ija[k+1]-1):
-                        if ija[g] == i:
-                            sILU = sILU.at[i].set(sILU[i] - sILU[s] * sILU[g])
-                if ija[l] >= k+1:
-                    j = ija[l]
-                    for g in range(ija[k], ija[k+1]-1):
-                        if ija[g] == j:
-                            sILU = sILU.at[l].set(sILU[l] - sILU[s] * sILU[g])
-                return sILU, l + 1
-
-            sILU, _ = lax.while_loop(innermost_cond, innermost_body, (sILU, l))
-            return sILU, s + 1
-
-        sILU, _ = lax.while_loop(inner_cond, inner_body, (sILU, s))
-        return sILU, i + 1
-
-    sILU, _ = lax.while_loop(cond, body, (sILU, 2))
-    return sILU

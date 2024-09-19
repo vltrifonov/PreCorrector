@@ -5,7 +5,7 @@ from functools import partial
 
 from linsolve.cg import ConjGrad
 from linsolve.precond import llt_inv_prec
-from data.utils import direc_graph_from_linear_system_sparse
+from data.graph_utils import direc_graph_from_linear_system_sparse
 from utils import asses_cond_with_res
 
 def spai_Pinv_hutch(Pinv, x, b):

@@ -5,7 +5,7 @@ from functools import partial
 
 from linsolve.cg import ConjGrad
 from linsolve.precond import llt_prec_trig_solve
-from data.utils import direc_graph_from_linear_system_sparse
+from data.graph_utils import direc_graph_from_linear_system_sparse
 from utils import asses_cond_with_res
 
 # @jsparse.sparsify

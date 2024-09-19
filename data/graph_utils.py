@@ -1,9 +1,6 @@
-import scipy
 import numpy as np
 import jax.numpy as jnp
 from jax.experimental import sparse as jsparse
-
-from utils import factorsILUp
 
 # Graph manipulations
 def direc_graph_from_linear_system_sparse(A, b):

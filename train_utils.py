@@ -2,28 +2,26 @@ import os
 from functools import partial
 
 import jax.numpy as jnp
-from jax import random, vmap, clear_caches, jit
-import numpy as np
-import pandas as pd
+from jax import random, vmap, clear_caches
 from jax.experimental import sparse as jsparse
-
 import optax
 from equinox.nn import Conv1d
-import matplotlib.pyplot as plt
-from functools import partial
+
+import numpy as np
+import pandas as pd
 from time import perf_counter
 
-from data.dataset import dataset_qtt # dataset_Krylov, dataset_FD, 
+from data.dataset import dataset_qtt
 from linsolve.cg import ConjGrad
 from linsolve.precond import llt_prec_trig_solve, llt_inv_prec
-from model import MessagePassing, FullyConnectedNet, PrecNet, ConstantConv1d, MessagePassingWithDot, CorrectionNet, PrecNetNorm
+from model import MessagePassing, FullyConnectedNet, PrecNet, ConstantConv1d, CorrectionNet, PrecNetNorm
 
-from utils import params_count, asses_cond, iter_per_residual, batch_indices, id_generator, iter_per_residual, asses_cond_with_res
-from data.utils import direc_graph_from_linear_system_sparse
+from utils import asses_cond, iter_per_residual, id_generator, asses_cond_with_res
+from data.graph_utils import direc_graph_from_linear_system_sparse
 from train import train
 
-def training_search(config_ls, folder):
-    dir_ = '/mnt/local/data/vtrifonov/prec-learning-Notay-loss/results_cases'
+def training_search(config_ls, folder,
+                    dir_='/mnt/local/data/vtrifonov/prec-learning-Notay-loss/results_cases'):
     path = os.path.join(dir_, folder)
     try: os.mkdir(path)
     except: pass
@@ -78,8 +76,7 @@ def case_train(path, config, meta_data_df):
         )
         train_config['lr'] = lr
         
-    # Generate dataset and iniput data
-#     try:
+    # Generate dataset and input data
     s = perf_counter()
     A_train, A_pad_train, b_train, u_exact_train, bi_edges_train = dataset_qtt(pde, grid, variance, lhs_type, return_train=True,
                                                                                N_samples=N_samples_train, fill_factor=1, threshold=1e-4, precision=precision, power=power)
@@ -91,11 +88,6 @@ def case_train(path, config, meta_data_df):
             [A_test, A_pad_test, b_test, bi_edges_test, u_exact_test],
             jnp.array([1]), jnp.array([1])
     )
-        
-#     except:
-#         print('Skip this run on data creation step')
-#         return meta_data_df
-        
         
     # Cond of initial system
     cond_A = asses_cond_with_res(A_test[::cg_repeats, ...], b_test[::cg_repeats, ...], partial(ConjGrad, prec_func=None))
@@ -111,39 +103,44 @@ def case_train(path, config, meta_data_df):
     
     # Make L for prec and clean memory
     alpha = model.alpha.item() if corrector_net else -42
-#     nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(A_pad_test, b_test)
-#     lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(A_test, b_test)
-
     del data, A_train, A_pad_train, b_train, u_exact_train, bi_edges_train
     
-    # INVAID HARDOCDE
-    print("Change this line in 'train_utils.py'")
     L = []
-    for b in [(0, 50), (50, 100), (100, 150), (150, 200)]:
-        nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(A_pad_test[b[0]:b[1] , ...], b_test[b[0]:b[1] , ...])
-        lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(A_test[b[0]:b[1] , ...], b_test[b[0]:b[1] , ...])
-        L.append(vmap(model, in_axes=((0, 0, 0, 0), 0, (0, 0, 0, 0)), out_axes=(0))((nodes, edges, receivers, senders), bi_edges_test[b[0]:b[1], ...], (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders)))
+    chunk_size = 50
+    k = A_test.shape[0] // chunk_size
+    for k_i in range(k-1):
+        nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(A_pad_test[k_i*chunk_size:(k_i+1)*chunk_size, ...], b_test[k_i*chunk_size:(k_i+1)*chunk_size, ...])
+        lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(A_test[k_i*chunk_size:(k_i+1)*chunk_size, ...], b_test[k_i*chunk_size:(k_i+1)*chunk_size, ...])
+        L.append(vmap(model, in_axes=((0, 0, 0, 0), 0, (0, 0, 0, 0)), out_axes=(0))((nodes, edges, receivers, senders), bi_edges_test[k_i*chunk_size:(k_i+1)*chunk_size, ...], (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders)))
+    
+    nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(A_pad_test[(k-1)*chunk_size:, ...], b_test[(k-1)*chunk_size:, ...])
+    lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(A_test[(k-1)*chunk_size:, ...], b_test[(k-1)*chunk_size:, ...])
+    L.append(vmap(model, in_axes=((0, 0, 0, 0), 0, (0, 0, 0, 0)), out_axes=(0))((nodes, edges, receivers, senders), bi_edges_test[(k-1)*chunk_size:, ...], (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders)))
     
     del model, bi_edges_test
     L = jsparse.bcoo_concatenate(L, dimension=0)
     clear_caches()
     
-    # Not preconditioned CG
-    _, res_I = ConjGrad(A_test[::cg_repeats, ...], b_test[::cg_repeats, ...], N_iter=cg_valid_repeats, prec_func=None, seed=42)
-    res_I = jnp.linalg.norm(res_I, axis=1).mean(0)
     
-    # PCG
-    if not prec_inverse:
-        # P = LL^T
-        prec = partial(llt_prec_trig_solve, L=L)
-    else:
-        # P^{-1} = LL^T
-        prec = partial(llt_inv_prec, L=L)
-    s = perf_counter()
-    _, res_LLT = ConjGrad(A_test[::cg_repeats, ...], b_test[::cg_repeats, ...], N_iter=cg_valid_repeats, prec_func=prec, seed=42)
-    dt_prec_cg = perf_counter() - s
-    res_LLT = jnp.linalg.norm(res_LLT, axis=1).mean(0)
-        
+    
+#     # Not preconditioned CG
+#     _, res_I = ConjGrad(A_test[::cg_repeats, ...], b_test[::cg_repeats, ...], N_iter=cg_valid_repeats, prec_func=None, seed=42)
+#     res_I = jnp.linalg.norm(res_I, axis=1).mean(0)
+    
+#     # PCG
+#     if not prec_inverse:
+#         # P = LL^T
+#         prec = partial(llt_prec_trig_solve, L=L)
+#     else:
+#         # P^{-1} = LL^T
+#         prec = partial(llt_inv_prec, L=L)
+#     s = perf_counter()
+#     _, res_LLT = ConjGrad(A_test[::cg_repeats, ...], b_test[::cg_repeats, ...], N_iter=cg_valid_repeats, prec_func=prec, seed=42)
+#     dt_prec_cg = perf_counter() - s
+#     res_LLT = jnp.linalg.norm(res_LLT, axis=1).mean(0)
+    
+    
+    
     # Save run's meta data
     flag = True
     while flag:

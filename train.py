@@ -113,6 +113,10 @@ def train(model, data, train_config, loss_name, key=42, repeat_step=1, with_cond
         raise ValueError('Invalid loss name.')
     compute_loss_and_grads = eqx.filter_value_and_grad(compute_loss)
     
+    def make_val_step(model, X, y):
+        loss, cond = compute_loss_cond(model, X, y)
+        return loss, cond
+    
     def make_step(carry, ind):
         model, opt_state = carry
         batched_X = [arr[ind, ...] for arr in X_train]
@@ -121,14 +125,6 @@ def train(model, data, train_config, loss_name, key=42, repeat_step=1, with_cond
         updates, opt_state = optim.update(grads, opt_state, eqx.filter(model, eqx.is_array))
         model = eqx.apply_updates(model, updates)
         return (model, opt_state), loss
-    
-    def make_val_step(model, X, y):
-        loss, cond = compute_loss_cond(model, X, y)
-        return loss, cond
-#     def make_val_step(model, ind):
-#         batched_X = [arr[ind, ...] for arr in X_test]
-#         loss, cond = compute_loss_cond(model, batched_X, y_test)
-#         return model, (loss, cond)
     
     def train_body(carry, x):
         model, opt_state = carry
