@@ -23,8 +23,9 @@ def compute_loss_llt(model, X, y, reduction=jnp.mean):
          X[4] - solution of linear system x.
      '''
     nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(X[1], X[2])
-    lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(X[0], X[2])
-    L = vmap(model, in_axes=((0, 0, 0, 0), 0, (0, 0, 0, 0)), out_axes=(0))((nodes, edges, receivers, senders), X[3], (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders))
+#     lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(X[0], X[2])
+#     L = vmap(model, in_axes=((0, 0, 0, 0), 0, (0, 0, 0, 0)), out_axes=(0))((nodes, edges, receivers, senders), X[3], (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders))
+    L = vmap(model, in_axes=((0, 0, 0, 0), 0), out_axes=(0))((nodes, edges, receivers, senders), X[3])#, (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders))
     loss = vmap(llt_loss, in_axes=(0, 0, 0), out_axes=(0))(L, X[4], X[2])
     return reduction(loss)
 
@@ -32,7 +33,8 @@ def compute_loss_llt_with_cond(model, X, y, repeat_step, reduction=jnp.mean):
     '''Argument `repeat_step` is for ignoring duplicating lhs and rhs when Krylov dataset is used.'''
     nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(X[1], X[2])
     lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(X[0], X[2])
-    L = vmap(model, in_axes=((0, 0, 0, 0), 0, (0, 0, 0, 0)), out_axes=(0))((nodes, edges, receivers, senders), X[3], (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders))
+#     L = vmap(model, in_axes=((0, 0, 0, 0), 0, (0, 0, 0, 0)), out_axes=(0))((nodes, edges, receivers, senders), X[3], (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders))
+    L = vmap(model, in_axes=((0, 0, 0, 0), 0), out_axes=(0))((nodes, edges, receivers, senders), X[3])#, (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders))
     loss = vmap(llt_loss, in_axes=(0, 0, 0), out_axes=(0))(L, X[4], X[2])
     
     cg = partial(ConjGrad, prec_func=partial(llt_prec_trig_solve, L=L[::repeat_step, ...]))

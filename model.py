@@ -31,20 +31,20 @@ class CorrectionNet(eqx.Module):
         self.alpha = alpha
         return    
     
-    def __call__(self, train_graph, bi_edges_indx, lhs_graph):
-        lhs_nodes, lhs_edges, lhs_receivers, lhs_senders = lhs_graph
+    def __call__(self, train_graph, bi_edges_indx):#, lhs_graph):
+#         lhs_nodes, lhs_edges, lhs_receivers, lhs_senders = lhs_graph
         nodes, edges_init, receivers, senders = train_graph
         norm = jnp.abs(edges_init).max()
         edges = edges_init / norm
         
-         # Save main diagonal in real lhs
-        diag_edge_indx_lhs = jnp.diff(jnp.hstack([lhs_senders[:, None], lhs_receivers[:, None]]))
-        diag_edge_indx_lhs = jnp.argwhere(diag_edge_indx_lhs == 0, size=lhs_nodes.shape[0], fill_value=jnp.nan)[:, 0].astype(jnp.int32)
-        diag_edge = lhs_edges.at[diag_edge_indx_lhs].get(mode='drop', fill_value=0)
+#          # Save main diagonal in real lhs
+#         diag_edge_indx_lhs = jnp.diff(jnp.hstack([lhs_senders[:, None], lhs_receivers[:, None]]))
+#         diag_edge_indx_lhs = jnp.argwhere(diag_edge_indx_lhs == 0, size=lhs_nodes.shape[0], fill_value=jnp.nan)[:, 0].astype(jnp.int32)
+#         diag_edge = lhs_edges.at[diag_edge_indx_lhs].get(mode='drop', fill_value=0)
         
-        # Main diagonal in padded lhs for train
-        diag_edge_indx = jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]]))
-        diag_edge_indx = jnp.argwhere(diag_edge_indx == 0, size=nodes.shape[0], fill_value=jnp.nan)[:, 0].astype(jnp.int32)
+#         # Main diagonal in padded lhs for train
+#         diag_edge_indx = jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]]))
+#         diag_edge_indx = jnp.argwhere(diag_edge_indx == 0, size=nodes.shape[0], fill_value=jnp.nan)[:, 0].astype(jnp.int32)
                 
         nodes = self.NodeEncoder(nodes[None, ...])
         edges = self.EdgeEncoder(edges[None, ...])

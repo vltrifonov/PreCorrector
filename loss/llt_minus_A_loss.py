@@ -8,10 +8,11 @@ from linsolve.precond import llt_prec_trig_solve
 from data.graph_utils import direc_graph_from_linear_system_sparse
 from utils import asses_cond_with_res
 
-# @jsparse.sparsify
-def llt_minus_A_loss(L, A):
+@jsparse.sparsify
+def llt_minus_A_loss(L, A, b):
     "L should be sparse (and not batched since function is vmaped)"
-    return jnp.square(jnp.linalg.norm(L @ L.T - A, ord='fro'))
+    return jnp.square(jnp.linalg.norm(L @ (L.T @ b) - A @ b, ord=2))
+#     return jnp.square(jnp.linalg.norm(L @ L.T - A, ord='fro'))
 
 def compute_loss_llt_minus_A(model, X, y, reduction=jnp.mean):
     '''Placeholder for supervised learning `y`.
@@ -23,9 +24,11 @@ def compute_loss_llt_minus_A(model, X, y, reduction=jnp.mean):
          X[4] - solution of linear system x.
      '''
     nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(X[1], X[2])
-    lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(X[0], X[2])
-    L = vmap(model, in_axes=((0, 0, 0, 0), 0, (0, 0, 0, 0)), out_axes=(0))((nodes, edges, receivers, senders), X[3], (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders))
-    loss = vmap(llt_minus_A_loss, in_axes=(0, 0), out_axes=(0))(L.todense(), X[0].todense())
+#     lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(X[0], X[2])
+#     L = vmap(model, in_axes=((0, 0, 0, 0), 0, (0, 0, 0, 0)), out_axes=(0))((nodes, edges, receivers, senders), X[3], (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders))
+    L = vmap(model, in_axes=((0, 0, 0, 0), 0), out_axes=(0))((nodes, edges, receivers, senders), X[3])#, (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders))
+    loss = vmap(llt_minus_A_loss, in_axes=(0, 0, 0), out_axes=(0))(L, X[0], X[2])
+#     loss = vmap(llt_minus_A_loss, in_axes=(0, 0), out_axes=(0))(L.todense(), X[0].todense())
     return reduction(loss)
 
 def compute_loss_llt_minus_A_with_cond(model, X, y, repeat_step, reduction=jnp.mean):

@@ -35,7 +35,7 @@ def iter_per_residual(cg_res, thresholds=[1e-3, 1e-6, 1e-9, 1e-12]):
     iter_per_res = {}
     for k in thresholds:
         try: val = jnp.where(cg_res <= k)[0][0].item()
-        except: val = jnp.nan
+        except: val = np.nan
         iter_per_res[k] = val
     return iter_per_res
 
@@ -59,8 +59,12 @@ def asses_cond_with_res(A, b, cg, start_epoch=5, end_epoch=10):
 def make_BCOO(Aval, Aind, N_points):
     return jsparse.BCOO((Aval, Aind), shape=(N_points**2, N_points**2))
 
+# def jBCOO_to_scipyCSR(A):
+#     return coo_matrix((A.data, (A.indices[:, 0], A.indices[:, 1])), shape=A.shape, dtype=np.float64).tocsr()
 def jBCOO_to_scipyCSR(A):
-    return coo_matrix((A.data, (A.indices[:, 0], A.indices[:, 1])), shape=A.shape, dtype=np.float64).tocsr()
+    in_bound_ind = np.where(np.array(A.indices[:, 0]) != A.shape[0])[0]
+    return coo_matrix((A.data[in_bound_ind], (A.indices[:, 0][in_bound_ind], A.indices[:, 1][in_bound_ind])), shape=A.shape, dtype=np.float64).tocsr()
+
 
 def factorsILUp(A, p):
     l, u = ilupp.ilu0(A)
@@ -120,13 +124,16 @@ def parse_run(dir_name, run_name, figsize=(14, 14), with_cond=True):
         axes[i, 0].grid()
         axes[i, 0].set_title(n)
         
-        axes[i, -1].plot(range(len(run['res_I'])), run['res_I'], label="CG")
-        axes[i, -1].plot(range(len(run['res_LLT'])), run['res_LLT'], label="PCG")
-        axes[i, -1].legend()
-        axes[i, -1].set_yscale('log')
-        axes[i, -1].set_xlabel('Iteration')
-        axes[i, -1].set_ylabel('$\|res\|$')
-        axes[i, -1].grid()
+        try:
+            axes[i, -1].plot(range(len(run['res_I'])), run['res_I'], label="CG")
+            axes[i, -1].plot(range(len(run['res_LLT'])), run['res_LLT'], label="PCG")
+            axes[i, -1].legend()
+            axes[i, -1].set_yscale('log')
+            axes[i, -1].set_xlabel('Iteration')
+            axes[i, -1].set_ylabel('$\|res\|$')
+            axes[i, -1].grid()
+        except:
+            pass
         
         if with_cond:
             axes[i, 1].plot(range(len(run['losses'][0])), run['losses'][2], label='Test')

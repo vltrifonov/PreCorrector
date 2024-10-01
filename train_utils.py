@@ -9,16 +9,18 @@ from equinox.nn import Conv1d
 
 import numpy as np
 import pandas as pd
+from scipy.sparse.linalg import LinearOperator
 from time import perf_counter
 
 from data.dataset import dataset_qtt
-from linsolve.cg import ConjGrad
-from linsolve.precond import llt_prec_trig_solve, llt_inv_prec
 from model import MessagePassing, FullyConnectedNet, PrecNet, ConstantConv1d, CorrectionNet, PrecNetNorm
 
-from utils import asses_cond, iter_per_residual, id_generator, asses_cond_with_res
+from linsolve.scipy_linsolve import batched_cg_scipy, solve_precChol, make_Chol_prec_from_bcoo
+from utils import iter_per_residual, id_generator, jBCOO_to_scipyCSR
 from data.graph_utils import direc_graph_from_linear_system_sparse
 from train import train
+
+from scipy.sparse import coo_matrix
 
 def training_search(config_ls, folder,
                     dir_='/mnt/local/data/vtrifonov/prec-learning-Notay-loss/results_cases'):
@@ -88,9 +90,6 @@ def case_train(path, config, meta_data_df):
             [A_test, A_pad_test, b_test, bi_edges_test, u_exact_test],
             jnp.array([1]), jnp.array([1])
     )
-        
-    # Cond of initial system
-    cond_A = asses_cond_with_res(A_test[::cg_repeats, ...], b_test[::cg_repeats, ...], partial(ConjGrad, prec_func=None))
     
     # Train the model
 #     try:
@@ -118,28 +117,11 @@ def case_train(path, config, meta_data_df):
     L.append(vmap(model, in_axes=((0, 0, 0, 0), 0, (0, 0, 0, 0)), out_axes=(0))((nodes, edges, receivers, senders), bi_edges_test[(k-1)*chunk_size:, ...], (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders)))
     
     del model, bi_edges_test
-    L = jsparse.bcoo_concatenate(L, dimension=0)
     clear_caches()
     
+    L = jsparse.bcoo_concatenate(L, dimension=0)
     
-    
-#     # Not preconditioned CG
-#     _, res_I = ConjGrad(A_test[::cg_repeats, ...], b_test[::cg_repeats, ...], N_iter=cg_valid_repeats, prec_func=None, seed=42)
-#     res_I = jnp.linalg.norm(res_I, axis=1).mean(0)
-    
-#     # PCG
-#     if not prec_inverse:
-#         # P = LL^T
-#         prec = partial(llt_prec_trig_solve, L=L)
-#     else:
-#         # P^{-1} = LL^T
-#         prec = partial(llt_inv_prec, L=L)
-#     s = perf_counter()
-#     _, res_LLT = ConjGrad(A_test[::cg_repeats, ...], b_test[::cg_repeats, ...], N_iter=cg_valid_repeats, prec_func=prec, seed=42)
-#     dt_prec_cg = perf_counter() - s
-#     res_LLT = jnp.linalg.norm(res_LLT, axis=1).mean(0)
-    
-    
+    _, iters_mean, iters_std, time_mean, time_std = batched_cg_scipy(A_test, b_test, P=make_Chol_prec_from_bcoo(L), atol=1e-12, maxiter=cg_valid_repeats)
     
     # Save run's meta data
     flag = True
@@ -147,21 +129,26 @@ def case_train(path, config, meta_data_df):
         run_name = id_generator()
         flag = run_name in meta_data_df.index
         
-    res_steps_I = iter_per_residual(res_I)    
-    res_steps_LLT = iter_per_residual(res_LLT)
-    params_to_save = [pde, grid, variance, N_samples_train, N_samples_test, lhs_type, batch_size, epoch_num, lr_start, schedule_params,
-                      cg_valid_repeats, losses[0][-1], losses[1][-1], losses[2][-1], cond_A, alpha, *res_steps_I.values(),
-                      *res_steps_LLT.values(), dt_data, dt_train, dt_prec_cg, precision, prec_inverse, loss_type]
+    params_to_save = [pde, grid, variance, N_samples_train, N_samples_test, lhs_type, batch_size, epoch_num, lr_start,
+                      schedule_params, precision, prec_inverse, loss_type, cg_valid_repeats, corrector_net, 
+                      losses[0][-1], losses[1][-1], alpha, dt_data, dt_train,
+                      iters_mean[0], iters_mean[1], iters_mean[2], iters_mean[3],
+                      iters_std[0], iters_std[1], iters_std[2], iters_std[3],
+                      time_mean[0], time_mean[1], time_mean[2], time_mean[3],
+                      time_std[0], time_std[1], time_std[2], time_std[3]]
     
     meta_data_df = save_meta_params(meta_data_df, params_to_save, run_name)
-    jnp.savez(os.path.join(path, run_name + '.npz'), losses=losses, res_I=res_I, res_LLT=res_LLT)
+    jnp.savez(os.path.join(path, run_name + '.npz'), losses=losses)#, res_I=res_I, res_LLT=res_LLT)
     return meta_data_df
 
 def save_meta_params(df, params_values, run_name):
     params_names = ['pde', 'grid', 'variance', 'N_samples_train', 'N_samples_test', 'lhs_type', 'batch_size', 'epoch_num', 'lr_start',
-                    'schedule_params', 'cg_valid_repeats', 'train_loss_last', 'test_loss_last', 'cond_prec_system', 'cond_initial_system',
-                    'alpha', 'cg_1e_3', 'cg_1e_6', 'cg_1e_9', 'cg_1e_12','pcg_1e_3', 'pcg_1e_6', 'pcg_1e_9', 'pcg_1e_12',
-                    'time_data', 'time_train', 'time_pcg', 'precision', 'prec_inverse', 'loss_type']
+                    'schedule_params', 'precision', 'prec_inverse', 'loss_type', 'cg_valid_repeats', 'corrector_net',
+                    'train_loss_last', 'test_loss_last', 'alpha', 'time_data', 'time_train',
+                    'iters_mean_1e_3', 'iters_mean_1e_6', 'iters_mean_1e_9', 'iters_mean_1e_12',
+                    'iters_std_1e_3', 'iters_std_1e_6', 'iters_std_1e_9', 'iters_std_1e_12',
+                    'time_mean_1e_3', 'time_mean_1e_6', 'time_mean_1e_9', 'time_mean_1e_12',
+                    'time_std_1e_3', 'time_std_1e_6', 'time_std_1e_9', 'time_std_1e_12']
     for n, v in zip(params_names, params_values):
         df.loc[run_name, n] = str(v)
     return df
