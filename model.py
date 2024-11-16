@@ -49,7 +49,7 @@ class CorrectionNet(eqx.Module):
         nodes = self.NodeEncoder(nodes[None, ...])
         edges = self.EdgeEncoder(edges[None, ...])
         nodes, edges, receivers, senders = self.MessagePass(nodes, edges, receivers, senders)
-        edges = bi_direc_edge_avg(edges, bi_edges_indx)
+#         edges = bi_direc_edge_avg(edges, bi_edges_indx)
         edges = self.EdgeDecoder(edges)[0, ...]
         
         edges = edges * norm

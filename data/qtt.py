@@ -136,7 +136,7 @@ def load_pde_data(pde, grid, variance, lhs_type, return_train, N_samples=1000, f
         file = jnp.load(os.path.join(data_dir, name+'_train.npz'))      
     else:
         file = jnp.load(os.path.join(data_dir, name+'_test.npz'))
-    file['Aval']
+        
     A = vmap(make_BCOO, in_axes=(0, 0, None), out_axes=(0))(file['Aval'], file['Aind'], grid)[0:N_samples, ...]
     b = jnp.asarray(file['b'])[0:N_samples, ...]
     x = jnp.asarray(file['x'])[0:N_samples, ...]
@@ -144,7 +144,7 @@ def load_pde_data(pde, grid, variance, lhs_type, return_train, N_samples=1000, f
     return A, A_pad, b, x, bi_edges
     
     
-# Functions for padding linear systems with ILU(p) and ILUt
+## Functions for padding linear systems with ILU(p) and ILUt
 def pad_lhs_FD(A, b, *args):
     A_pad = A
     

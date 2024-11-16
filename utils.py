@@ -19,7 +19,7 @@ import random as simple_random
 
 def batch_indices(key, arr, batch_size):
     dataset_size = len(arr)
-    batch_indices = random.choice(key, jnp.arange(dataset_size, dtype=jnp.int64), shape=[dataset_size // batch_size, batch_size])
+    batch_indices = random.choice(key, jnp.arange(dataset_size, dtype=jnp.int32), shape=[dataset_size // batch_size, batch_size])
     return batch_indices
 
 def params_count(model):
