@@ -20,6 +20,7 @@ from operator import itemgetter
 
 from utils import batch_indices
 
+EPS = 1e-8
 PATH_SUITESPARSE = '/mnt/local/data/vtrifonov/susbet_SuiteSparse/scipy_sparse'
 KAPORIN_SUSBET = [
     'bodyy6','bcsstk18','bcsstk25','cvxbqp1','bcsstk17','gridgena',
@@ -52,7 +53,8 @@ def make_system(name, path):
 #     b = A @ x
     return A#, b, x
 
-def get_kaporin_subset(mat_set=KAPORIN_SUSBET):
+def get_kaporin_subset(mat_set, prec_type):
+    assert prec_type in {'ic(0)', 'ict(1)'}
     A, A_pad, mat_sizes = [], [], []
     max_len = 1e-8
     
@@ -61,7 +63,10 @@ def get_kaporin_subset(mat_set=KAPORIN_SUSBET):
         print(f'{name},', end=' ')
         A_i_scp = make_system(name, PATH_SUITESPARSE).tocsc()
         A.append(A_i_scp)
-        L_i = ilupp.ichol0(A_i_scp)
+        if prec_type == 'ic(0)':
+            L_i = ilupp.ichol0(A_i_scp)
+        else:
+            L_i = ilupp.icholt(A_i_scp, add_fill_in=1,  threshold=1e-4)
         A_pad.append(jsparse.BCOO.from_scipy_sparse(L_i + sparse.triu(L_i.T, k=1)).sort_indices())
         
         len_i = A_pad[-1].data.shape[0]
@@ -107,11 +112,11 @@ class CorrectionNetKapSet(eqx.Module):
         self.alpha = alpha
         return    
     
-    def __call__(self, train_graph):
+    def __call__(self, train_graph, bi_edge_placeholder):
         nodes, edges_init, receivers, senders = train_graph
-        norm = jnp.abs(edges_init).max()
+        norm = jnp.abs(edges_init).max() + EPS
         edges = edges_init / norm
-                
+        
         nodes = self.NodeEncoder(nodes[None, ...])
         edges = self.EdgeEncoder(edges[None, ...])
         nodes, edges, receivers, senders = self.MessagePass(nodes, edges, receivers, senders)
@@ -119,7 +124,7 @@ class CorrectionNetKapSet(eqx.Module):
         
         edges = edges * norm
         edges = edges_init + self.alpha * edges
-        
+
         nodes, edges, receivers, senders = graph_tril(nodes, jnp.squeeze(edges), receivers, senders)
         low_tri = graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders)
         return low_tri

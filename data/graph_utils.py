@@ -30,7 +30,7 @@ def bi_direc_indx(receivers, senders, n_node):
 
 def bi_direc_edge_avg(edges, indices):
     f = len(edges)
-    edges_upd = edges.at[:, indices].set(edges[:, indices].mean(-1).reshape(f, -1, 1), mode='drop')
+    edges_ubbbpd = edges.at[:, indices].set(edges[:, indices].mean(-1).reshape(f, -1, 1), mode='drop')
     return edges_upd
 
 def graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders):
