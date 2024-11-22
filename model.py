@@ -12,7 +12,9 @@ from jax.ops import segment_sum
 import equinox as eqx
 
 from data.graph_utils import bi_direc_edge_avg, graph_to_low_tri_mat_sparse, graph_tril
-    
+
+EPS = 1e-16
+
 class CorrectionNet(eqx.Module):
     '''L = L + alpha * GNN(L)
     Perseving diagonal as: diag(A) = diag(D) from A = LDL^T'''
@@ -179,15 +181,25 @@ class MessagePassing(eqx.Module):
         return        
         
     def __call__(self, nodes, edges, receivers, senders):
+#         print(jnp.any(jnp.isnan(nodes)))
+#         print(jnp.any(jnp.isnan(edges)))
+#         print('!!\n')
         for _ in range(self.mp_rounds):
             nodes = self._update_nodes(nodes, edges, receivers, senders)
+#             print('Nodes:')
+#             print(jnp.any(jnp.isnan(nodes)))
             edges = self._update_edges(nodes, edges, receivers, senders)
+#             print('Edges:')
+#             print(jnp.any(jnp.isnan(edges)),end ='\n\n')
         return nodes, edges, receivers, senders
     
     def _update_nodes(self, nodes, edges, receivers, senders):
         sum_n_node = tree.tree_leaves(nodes)[0].shape[1]
         edges_by_receivers = edges * nodes[:, receivers] # Elemet-wise e_{i,j,t}v_{j,t}
-
+        
+#         print('edges_by_receivers')    
+#         print(jnp.any(jnp.isnan(edges_by_receivers)))
+        
         sent_attributes = vmap(
             tree.tree_map,
             in_axes=(None, 0), out_axes=(0)
@@ -197,14 +209,20 @@ class MessagePassing(eqx.Module):
 #             in_axes=(None, 0), out_axes=(0)
 #         )(lambda e: self.aggregate_edges_for_nodes_fn(e, receivers, sum_n_node), edges)
         
+#         print('sent_attributes')    
+#         print(jnp.any(jnp.isnan(sent_attributes)))
+        
         nodes = self.update_node_fn(jnp.concatenate([nodes, sent_attributes], axis=0)) #jnp.concatenate([nodes, sent_attributes, received_attributes], axis=0))
         return nodes
     
     def _update_edges(self, nodes, edges, receivers, senders):
         sent_attributes = tree.tree_map(lambda n: n[:, senders], nodes)
         received_attributes = tree.tree_map(lambda n: n[:, receivers], nodes)
+#         print(jnp.any(jnp.isnan(sent_attributes)))
+#         print(jnp.any(jnp.isnan(received_attributes)))
 
 #         # Find non-main-diagonal edges
+#         print(senders.shape[0], nodes.shape[1])
         non_diag_edge_idx = jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]]))
         non_diag_edge_idx = jnp.nonzero(non_diag_edge_idx, size=senders.shape[0]-nodes.shape[1], fill_value=jnp.nan)[0].astype(jnp.int32)
         
@@ -214,6 +232,9 @@ class MessagePassing(eqx.Module):
             received_attributes[:, non_diag_edge_idx]
         ], axis=0)
         edges_upd = self.update_edge_fn(feat_in)
+        
+#         print(jnp.any(jnp.isnan(edges_upd)))
+#         print()
         edges = edges.at[:, non_diag_edge_idx].set(edges_upd, mode='drop')
         return edges
 

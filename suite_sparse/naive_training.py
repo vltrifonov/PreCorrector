@@ -13,10 +13,11 @@ import jax.numpy as jnp
 from jax import random, vmap, jit
 import jax.experimental.sparse as jsparse
 
-from loss.llt_loss import llt_loss
+# from loss.llt_loss import llt_loss
 from utils import batch_indices
 from data.graph_utils import direc_graph_from_linear_system_sparse
 
+PREC_PYMATTING = '/mnt/local/data/vtrifonov/susbet_SuiteSparse/pymatting_ichol_thresh1e-2'
 PATH_SUITESPARSE = '/mnt/local/data/vtrifonov/susbet_SuiteSparse/scipy_sparse'
 KAPORIN_SUSBET = [
     'bodyy6','bcsstk18','bcsstk25','cvxbqp1','bcsstk17','gridgena',
@@ -56,13 +57,15 @@ def naive_train(model, data, train_config, grad_accum_batch=True):
         loss_train_batches = []
         
         batches_train = batch_indices(keys[0], X_train[0], batch_size)
-        for b in batches_train:
+        for i, b in enumerate(batches_train):
+            print(f' Batch {i}')
 #             print(b)
 #             print(b.tolist())
 #             print(itemgetter(*b.tolist())(X_train[0]))
             batched_X_train = [itemgetter(*b.tolist())(arr) for arr in X_train]
             model, opt_state, loss_train = single_batch_train_local(model, opt_state, batched_X_train)
             loss_train_batches.append(loss_train)
+            del batched_X_train
 
 #         batches_test = batch_indices(subkeys, X_test[0], batch_size)
 #         for b in batches_test:
@@ -77,30 +80,40 @@ def single_batch_val(model, batch):
 
 def single_batch_train(model, opt_state, batch, optim):
     loss = []
+#     print(' ', len(batch[0]))
     for i in range(len(batch[0])):
         A_pad, b, x = batch[0][i], batch[1][i], batch[2][i]
         A_pad = A_pad[None, ...]
         b, x = jnp.asarray(b)[None, ...], jnp.asarray(x)[None, ...]
-        
+#         print('A_pad', A_pad)
+#         print('b', b)
+#         print('x', x)
 #         print(A_pad.shape, b.shape, x.shape)
         l, grads = compute_loss_and_grads(model, A_pad, b, x)
+#         print(A_pad.nse*100 / (A_pad.shape[-1]**2))
         updates, opt_state = optim.update(grads, opt_state, eqx.filter(model, eqx.is_array))
         model = eqx.apply_updates(model, updates)
         loss.append(l)
     return model, opt_state, jnp.mean(jnp.asarray(loss))
+
+@jsparse.sparsify
+def llt_loss(L, x, b):
+    "L should be sparse (and not batched since function is vmaped)"
+    return jnp.square(jnp.linalg.norm(L @ (L.T @ x) - b, ord=2))
 
 def compute_loss(model, A_pad, b, x):
     nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(A_pad, b)
 #     print([a.shape for a in (nodes, edges, receivers, senders)])
 #     print(jnp.ones(2)[None, ...].shape)
     L = vmap(model, in_axes=(0, 0), out_axes=(0))((nodes, edges, receivers, senders), jnp.ones(2)[None, ...])
+#     print('L', L)
     loss = vmap(llt_loss, in_axes=(0, 0, 0), out_axes=(0))(L, x, b)
     return loss[0, ...]
 
 compute_loss_and_grads = eqx.filter_value_and_grad(compute_loss)
 
 def dataset_subset_accum_grad(mat_set, prec_type):
-    assert prec_type in {'ic(0)', 'ict(1)', 'pymatting'}
+    assert prec_type in {'ic(0)', 'ict(1)', 'pymatting', 'load_pymatting'}
     A, A_pad, b, x = [], [], [], []    
     print(f'Loading and decomposition:', end=' ')
     
@@ -115,15 +128,22 @@ def dataset_subset_accum_grad(mat_set, prec_type):
             L_i = ilupp.ichol0(A_i_scp)
         elif prec_type == 'ict(1)':
             L_i = ilupp.icholt(A_i_scp, add_fill_in=1,  threshold=1e-4)
-        else:
+        elif prec_type == 'pymatting':
             L_i = pymatting.ichol(A_i_scp).L
+        else:
+            L_i = sparse.load_npz(os.path.join(PREC_PYMATTING, name+'_ichol_pymatting.npz'))
         A_pad.append(jsparse.BCOO.from_scipy_sparse(L_i + sparse.triu(L_i.T, k=1)).sort_indices())
     
     print('\n  Loading is done')
     return A, A_pad, b, x
 
+def jacobi_symm_scaling(A):
+    D = sparse.diags(-1 / (np.sqrt(A.diagonal()) + 1e-10))
+    return D @ A @ D
+
 def make_system(name, path):
     A = sparse.load_npz(os.path.join(path, name+'.npz')).tocsr()
+    A = jacobi_symm_scaling(A)
     x = np.ones(A.shape[0])
     b = A @ x
     return A, b, x
