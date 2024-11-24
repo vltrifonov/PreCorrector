@@ -114,15 +114,15 @@ def train(model, data, train_config, loss_name, key=42, repeat_step=1, with_cond
         raise ValueError('Invalid loss name.')
     compute_loss_and_grads = eqx.filter_value_and_grad(compute_loss)
     
-    def make_val_step(model, X, y):
-        loss, cond = compute_loss_cond(model, X, y)
-        return loss, cond
+    def make_val_step(model, ind):
+        batched_X = [arr[ind, ...] for arr in X_test]
+        loss, cond = compute_loss_cond(model, batched_X, y_test)
+        return model, (loss, cond)
     
     def make_step(carry, ind):
         model, opt_state = carry
-        batched_X = X_train
-        batched_X = itemgetter(*a[0, ...].tolist())(A_train_list)
-#         [arr[ind, ...] for arr in X_train]
+#         batched_X = itemgetter(*a[0, ...].tolist())(A_train_list)
+        batched_X = [arr[ind, ...] for arr in X_train]
         
         loss, grads = compute_loss_and_grads(model, batched_X, y_train)
         updates, opt_state = optim.update(grads, opt_state, eqx.filter(model, eqx.is_array))
@@ -131,16 +131,15 @@ def train(model, data, train_config, loss_name, key=42, repeat_step=1, with_cond
     
     def train_body(carry, x):
         model, opt_state = carry
-        key = random.PRNGKey(x)
-        b = batch_indices(key, X_train[0], batch_size)
-#         b_test = batch_indices(key, X_test[0], batch_size)
+        keys = random.split(random.PRNGKey(x), 2)
+        b = batch_indices(keys[0], X_train[0], batch_size)
+        b_test = batch_indices(keys[1], X_test[0], batch_size)
         
         carry_inner_init = (model, opt_state)
         (model, opt_state), loss_train = lax.scan(make_step, carry_inner_init, b)
-#         model, (loss_test, cond_test) = lax.scan(make_val_step, model, b_test)
-        loss_test, cond_test = make_val_step(model, X_test, y_test)
+        model, (loss_test, cond_test) = lax.scan(make_val_step, model, b_test)
+#         loss_test, cond_test = make_val_step(model, X_stest, y_test)
         return (model, opt_state), [jnp.mean(loss_train), loss_test, cond_test] 
     
-    carry_init = (model, opt_state)
-    (model, _), losses = lax.scan(train_body, carry_init, jnp.arange(train_config['epoch_num']))
+    (model, _), losses = lax.scan(train_body, (model, opt_state), jnp.arange(train_config['epoch_num']))
     return model, losses

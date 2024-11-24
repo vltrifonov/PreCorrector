@@ -16,17 +16,13 @@ def llt_loss(L, x, b):
 def compute_loss_llt(model, X, y, reduction=jnp.mean):
     '''Placeholder for supervised learning `y`.
        Positions in `X`:
-         X[0] - lhs A (for cond calc).
-         X[1] - padded lhs A (for training).
-         X[2] - rhs b.
-         X[3] - indices of bi-directional edges in the graph.
-         X[4] - solution of linear system x.
+         X[0] - padded lhs A (for training).
+         X[1] - rhs b.
+         X[2] - solution of linear system x.
      '''
-    nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(X[1], X[2])
-#     lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(X[0], X[2])
-#     L = vmap(model, in_axes=((0, 0, 0, 0), 0, (0, 0, 0, 0)), out_axes=(0))((nodes, edges, receivers, senders), X[3], (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders))
-    L = vmap(model, in_axes=((0, 0, 0, 0), 0), out_axes=(0))((nodes, edges, receivers, senders), X[3])#, (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders))
-    loss = vmap(llt_loss, in_axes=(0, 0, 0), out_axes=(0))(L, X[4], X[2])
+    nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(X[0], X[1])
+    L = vmap(model, in_axes=(0), out_axes=(0))((nodes, edges, receivers, senders))#, X[3])#, (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders))
+    loss = vmap(llt_loss, in_axes=(0, 0, 0), out_axes=(0))(L, X[2], X[1])
     return reduction(loss)
 
 def compute_loss_llt_with_cond(model, X, y, repeat_step, reduction=jnp.mean):
