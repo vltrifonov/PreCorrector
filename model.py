@@ -13,8 +13,6 @@ import equinox as eqx
 
 from data.graph_utils import bi_direc_edge_avg, graph_to_low_tri_mat_sparse, graph_tril
 
-EPS = 1e-16
-
 class CorrectionNet(eqx.Module):
     '''L = L + alpha * GNN(L)
     Perseving diagonal as: diag(A) = diag(D) from A = LDL^T'''
@@ -33,14 +31,16 @@ class CorrectionNet(eqx.Module):
         self.alpha = alpha
         return    
     
-    def __call__(self, train_graph):#, lhs_graph):
+    def __call__(self, train_graph, bi_edges_indx):#, lhs_graph):
         nodes, edges_init, receivers, senders = train_graph
         norm = jnp.abs(edges_init).max()
         edges = edges_init / norm
+#         nodes = nodes / jnp.abs(nodes).max()
         
         nodes = self.NodeEncoder(nodes[None, ...])
         edges = self.EdgeEncoder(edges[None, ...])
         nodes, edges, receivers, senders = self.MessagePass(nodes, edges, receivers, senders)
+        edges = bi_direc_edge_avg(edges, bi_edges_indx)
         edges = self.EdgeDecoder(edges)[0, ...]
         
         edges = edges * norm

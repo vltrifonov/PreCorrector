@@ -139,7 +139,7 @@ def train(model, data, train_config, loss_name, key=42, repeat_step=1, with_cond
         (model, opt_state), loss_train = lax.scan(make_step, carry_inner_init, b)
         model, (loss_test, cond_test) = lax.scan(make_val_step, model, b_test)
 #         loss_test, cond_test = make_val_step(model, X_stest, y_test)
-        return (model, opt_state), [jnp.mean(loss_train), loss_test, cond_test] 
+        return (model, opt_state), [jnp.mean(loss_train), jnp.mean(loss_test), jnp.mean(cond_test)] 
     
     (model, _), losses = lax.scan(train_body, (model, opt_state), jnp.arange(train_config['epoch_num']))
     return model, losses

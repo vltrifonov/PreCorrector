@@ -52,9 +52,16 @@ def bx_ones_sol(A, rhs_func=lambda A,x: A@x, sol_func=np.ones):
 def gen_synthetic_dataset(abs_save_file_path, N, size, density, alpha,
                           bx_func, sol_func, rhs_func, lhs_func,
                           lhs_distr=stats.norm(loc=0, scale=1),
-                          prec_type='ic(0)'):
+                          prec_type='ic(0)', various_seed=False):
     assert prec_type in {'ic(0)', 'ichol_pymatting'}
-    prec_func = ilupp.ichol0 if prec_type == 'ic(0)' else lambda B: pymatting.ichol(B, discard_threshold=1e-2).L
+    if prec_type == 'ic(0)':
+        prec_func = ilupp.ichol0
+    else:
+        prec_func = lambda B: pymatting.ichol(B, discard_threshold=1e-2).L
+    if not various_seed:
+        seed_func = lambda n: 42
+    else:
+        seed_func = lambda n: n
     size = int(size)
     
     A_ls, L_ls = [], []
@@ -63,9 +70,11 @@ def gen_synthetic_dataset(abs_save_file_path, N, size, density, alpha,
     pattern_len = []
     
     print('Started')
+    ptr = 0
     while len(A_ls) < N:
         print(len(A_ls), end='')
-        A = lhs_func(size, density, alpha, sample_distr=lhs_distr)
+        A = lhs_func(size, density, alpha, sample_distr=lhs_distr, seed=seed_func(ptr))
+        ptr += 1
         L = prec_func(A)
         b, x = bx_func(A, rhs_func, sol_func)
         
