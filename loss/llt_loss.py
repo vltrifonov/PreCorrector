@@ -33,9 +33,9 @@ def compute_loss_llt(model, X, y, reduction=jnp.mean):
          X[3] - indices of bi-directional edges in the graph.
          X[4] - solution of linear system x.
      '''
-#     rhs_placeholder = jnp.ones_like(X[2])
-    nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(X[1], X[2])#rhs_placeholder)
-    lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(X[0], X[2])#rhs_placeholder)
+    rhs_placeholder = jnp.ones_like(X[2])
+    nodes, edges, receivers, senders, _ = direc_graph_from_linear_system_sparse(X[1], rhs_placeholder)
+    lhs_nodes, lhs_edges, lhs_receivers, lhs_senders, _ = direc_graph_from_linear_system_sparse(X[0], rhs_placeholder)
     L = vmap(model, in_axes=((0, 0, 0, 0), 0), out_axes=(0))((nodes, edges, receivers, senders), X[3])#, (lhs_nodes, lhs_edges, lhs_receivers, lhs_senders))
     loss = vmap(llt_loss, in_axes=(0, 0, 0), out_axes=(0))(L, X[4], X[2])
     return reduction(loss)

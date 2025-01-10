@@ -40,11 +40,85 @@ class CorrectionNet(eqx.Module):
         nodes = self.NodeEncoder(nodes[None, ...])
         edges = self.EdgeEncoder(edges[None, ...])
         nodes, edges, receivers, senders = self.MessagePass(nodes, edges, receivers, senders)
-        edges = bi_direc_edge_avg(edges, bi_edges_indx)
+#         edges = bi_direc_edge_avg(edges, bi_edges_indx)
         edges = self.EdgeDecoder(edges)[0, ...]
         
         edges = edges * norm
         edges = edges_init + self.alpha * edges
+        
+        nodes, edges, receivers, senders = graph_tril(nodes, jnp.squeeze(edges), receivers, senders)
+        low_tri = graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders)
+        return low_tri
+    
+class CorrectionNet_withoutL(eqx.Module):
+    '''L = L + alpha * GNN(L)
+    Perseving diagonal as: diag(A) = diag(D) from A = LDL^T'''
+    NodeEncoder: eqx.Module
+    EdgeEncoder: eqx.Module
+    MessagePass: eqx.Module
+    EdgeDecoder: eqx.Module
+    alpha: jax.Array
+
+    def __init__(self, NodeEncoder, EdgeEncoder, MessagePass, EdgeDecoder, alpha):
+        super(CorrectionNet_withoutL, self).__init__()
+        self.NodeEncoder = NodeEncoder
+        self.EdgeEncoder = EdgeEncoder
+        self.MessagePass = MessagePass
+        self.EdgeDecoder = EdgeDecoder
+        self.alpha = alpha
+        return    
+    
+    def __call__(self, train_graph, bi_edges_indx):#, lhs_graph):
+        nodes, edges_init, receivers, senders = train_graph
+        norm = jnp.abs(edges_init).max()
+        edges = edges_init / norm
+#         nodes = nodes / jnp.abs(nodes).max()
+        
+        nodes = self.NodeEncoder(nodes[None, ...])
+        edges = self.EdgeEncoder(edges[None, ...])
+        nodes, edges, receivers, senders = self.MessagePass(nodes, edges, receivers, senders)
+#         edges = bi_direc_edge_avg(edges, bi_edges_indx)
+        edges = self.EdgeDecoder(edges)[0, ...]
+        
+        edges = edges * norm
+#         edges = edges_init + self.alpha * edges
+        
+        nodes, edges, receivers, senders = graph_tril(nodes, jnp.squeeze(edges), receivers, senders)
+        low_tri = graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders)
+        return low_tri
+    
+class CorrectionNet_withoutL_withoutEncoders(eqx.Module):
+    '''L = L + alpha * GNN(L)
+    Perseving diagonal as: diag(A) = diag(D) from A = LDL^T'''
+    NodeEncoder: eqx.Module
+    EdgeEncoder: eqx.Module
+    MessagePass: eqx.Module
+    EdgeDecoder: eqx.Module
+    alpha: jax.Array
+
+    def __init__(self, NodeEncoder, EdgeEncoder, MessagePass, EdgeDecoder, alpha):
+        super(CorrectionNet_withoutL_withoutEncoders, self).__init__()
+        self.NodeEncoder = NodeEncoder
+        self.EdgeEncoder = EdgeEncoder
+        self.MessagePass = MessagePass
+        self.EdgeDecoder = EdgeDecoder
+        self.alpha = alpha
+        return    
+    
+    def __call__(self, train_graph, bi_edges_indx):#, lhs_graph):
+        nodes, edges_init, receivers, senders = train_graph
+        norm = jnp.abs(edges_init).max()
+        edges = edges_init / norm
+#         nodes = nodes / jnp.abs(nodes).max()
+        
+        nodes = nodes[None, ...]
+        edges = edges[None, ...]
+        nodes, edges, receivers, senders = self.MessagePass(nodes, edges, receivers, senders)
+#         edges = bi_direc_edge_avg(edges, bi_edges_indx)
+#         edges = self.EdgeDecoder(edges)[0, ...]
+        
+        edges = edges * norm
+#         edges = edges_init + self.alpha * edges
         
         nodes, edges, receivers, senders = graph_tril(nodes, jnp.squeeze(edges), receivers, senders)
         low_tri = graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders)
@@ -174,6 +248,7 @@ class MessagePassing(eqx.Module):
 #         print(jnp.any(jnp.isnan(edges)))
 #         print('!!\n')
         for _ in range(self.mp_rounds):
+            print('round:', _)
             nodes = self._update_nodes(nodes, edges, receivers, senders)
 #             print('Nodes:')
 #             print(jnp.any(jnp.isnan(nodes)))
@@ -212,19 +287,20 @@ class MessagePassing(eqx.Module):
 
 #         # Find non-main-diagonal edges
 #         print(senders.shape[0], nodes.shape[1])
-        non_diag_edge_idx = jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]]))
-        non_diag_edge_idx = jnp.nonzero(non_diag_edge_idx, size=senders.shape[0]-nodes.shape[1], fill_value=jnp.nan)[0].astype(jnp.int32)
+#         non_diag_edge_idx = jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]]))
+#         non_diag_edge_idx = jnp.nonzero(non_diag_edge_idx, size=senders.shape[0]-nodes.shape[1], fill_value=jnp.nan)[0].astype(jnp.int32)
         
         feat_in = jnp.concatenate([
-            edges[:, non_diag_edge_idx],
-            sent_attributes[:, non_diag_edge_idx],
-            received_attributes[:, non_diag_edge_idx]
+            edges,#[:, non_diag_edge_idx],
+            sent_attributes,#[:, non_diag_edge_idx],
+#             received_attributes#[:, non_diag_edge_idx]
         ], axis=0)
         edges_upd = self.update_edge_fn(feat_in)
         
 #         print(jnp.any(jnp.isnan(edges_upd)))
 #         print()
-        edges = edges.at[:, non_diag_edge_idx].set(edges_upd, mode='drop')
+#         edges = edges.at[:, non_diag_edge_idx].set(edges_upd, mode='drop')
+        edges = edges_upd
         return edges
 
 class MessagePassingWithDot(MessagePassing):
