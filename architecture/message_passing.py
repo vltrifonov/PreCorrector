@@ -6,6 +6,9 @@ import jax.tree_util as tree
 from jax.ops import segment_sum
 import equinox as eqx
 
+nodes_init_nodes_val = lambda nodes: nodes
+nodes_init_ones = lambda nodes: jnp.ones_like(nodes)
+
 class MessagePassing_StaticDiag(eqx.Module):
     update_edge_fn: eqx.Module
     update_node_fn: eqx.Module
