@@ -33,7 +33,7 @@ class PreCorrector(eqx.Module):
         low_tri = graph_to_spmatrix(nodes, edges, senders, receivers)
         return low_tri
     
-class SimpleGNN(eqx.Module):
+class NaiveGNN(eqx.Module):
     '''GNN operates on A.
     Perseving diagonal as: diag(A) = diag(D) from A = LDL^T'''
     NodeEncoder: eqx.Module
@@ -42,7 +42,7 @@ class SimpleGNN(eqx.Module):
     EdgeDecoder: eqx.Module
 
     def __init__(self, NodeEncoder, EdgeEncoder, MessagePass, EdgeDecoder):
-        super(SimpleGNN, self).__init__()
+        super(NaiveGNN, self).__init__()
         self.NodeEncoder = NodeEncoder
         self.EdgeEncoder = EdgeEncoder
         self.MessagePass = MessagePass

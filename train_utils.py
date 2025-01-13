@@ -1,4 +1,5 @@
 import os
+import json
 from functools import partial
 
 import jax.numpy as jnp
@@ -21,6 +22,117 @@ from data.graph_utils import direc_graph_from_linear_system_sparse
 from train import train
 
 from scipy.sparse import coo_matrix
+
+DEFAULT_NAIVEGNN_CONFIG = {
+    'node_enc': {
+        'features': [1, 16, 16],
+        'N_layers': 2,
+        'layer_': ConstantConv1d
+    },
+    'edge_enc': {
+        'features': [1, 16, 16],
+        'N_layers': 2,
+        'layer_': ConstantConv1d
+    },
+    'edge_dec': {
+        'features': [16, 16, 1],
+        'N_layers': 2,
+        'layer_': ConstantConv1d
+    },
+    'mp': {
+        'edge_upd': {
+            'features': [48, 16, 16],
+            'N_layers': 2,
+            'layer_': ConstantConv1d
+        },
+        'node_upd': {
+            'features': [32, 16, 16],
+            'N_layers': 2,
+            'layer_': ConstantConv1d
+        },
+        'mp_rounds': 5
+    }
+}
+
+DEFAULT_PRECORRECTOR_CONFIG = {
+    'alpha': jnp.array([0.]),
+    'node_enc': {
+        'features': [1, 16, 16],
+        'N_layers': 2,
+        'layer_': Conv1d
+    },
+    'edge_enc': {
+        'features': [1, 16, 16],
+        'N_layers': 2,
+        'layer_': Conv1d
+    },
+    'edge_dec': {
+        'features': [16, 16, 1],
+        'N_layers': 2,
+        'layer_': Conv1d
+    },
+    'mp': {
+        'edge_upd': {
+            'features': [48, 16, 16],
+            'N_layers': 2,
+            'layer_': Conv1d
+        },
+        'node_upd': {
+            'features': [32, 16, 16],
+            'N_layers': 2,
+            'layer_': Conv1d
+        },
+        'mp_rounds': 5
+    }
+}
+
+def make_NaiveGNN(key, config):
+    subkeys = random.split(key, 5)
+    NodeEncoder = FullyConnectedNet(**config['node_enc'], key=subkeys[0])
+    EdgeEncoder = FullyConnectedNet(**config['edge_enc'], key=subkeys[1])
+    EdgeDecoder = FullyConnectedNet(**config['edge_dec'], key=subkeys[2])
+    MessagePass = MessagePassing(
+        update_edge_fn = FullyConnectedNet(**config['mp']['edge_upd'], key=subkeys[3]),
+        update_node_fn = FullyConnectedNet(**config['mp']['node_upd'], key=subkeys[4]),
+        mp_rounds = config['mp']['mp_rounds']
+    )
+    model = NaiveGNN(NodeEncoder=NodeEncoder, EdgeEncoder=EdgeEncoder,
+                     EdgeDecoder=EdgeDecoder, MessagePass=MessagePass)
+    return model
+
+def make_PreCorrector(key, config):
+    subkeys = random.split(key, 5)
+    NodeEncoder = FullyConnectedNet(**config['node_enc'], key=subkeys[0])
+    EdgeEncoder = FullyConnectedNet(**config['edge_enc'], key=subkeys[1])
+    EdgeDecoder = FullyConnectedNet(**config['edge_dec'], key=subkeys[2])
+    MessagePass = MessagePassing(
+        update_edge_fn = FullyConnectedNet(**config['mp']['edge_upd'], key=subkeys[3]),
+        update_node_fn = FullyConnectedNet(**config['mp']['node_upd'], key=subkeys[4]),
+        mp_rounds = config['mp']['mp_rounds']
+    )
+    model = PreCorrector(NodeEncoder=NodeEncoder, EdgeEncoder=EdgeEncoder,
+                         EdgeDecoder=EdgeDecoder, MessagePass=MessagePass, alpha=jnp.array([0.]))
+    return model
+    
+def save_model_hp(filename, hyperparams, model):
+    with open(filename, "wb") as f:
+        hyperparam_str = json.dumps(hyperparams)
+        f.write((hyperparam_str + "\n").encode())
+        eqx.tree_serialise_leaves(f, model)
+    return
+
+def load_model_hp_base(filename, make_model, seed):
+    with open(filename, "rb") as f:
+        hyperparams = json.loads(f.readline().decode())
+        model = make_model(key=random.PRNGKey(seed), config)
+        return eqx.tree_deserialise_leaves(f, model) 
+    
+
+
+
+
+
+
 
 def training_search(config_ls, folder,
                     dir_='/mnt/local/data/vtrifonov/prec-learning-Notay-loss/results_cases'):
