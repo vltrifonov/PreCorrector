@@ -39,7 +39,7 @@ class PreCorrector(eqx.Module):
         low_tri = graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders)
         return low_tri
     
-class NaiveGNN(eqx.Module):
+class SimpleGNN(eqx.Module):
     '''GNN operates on A.
     Perseving diagonal as: diag(A) = diag(D) from A = LDL^T'''
     NodeEncoder: eqx.Module
