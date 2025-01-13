@@ -2,41 +2,35 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-from data.graph_utils import bi_direc_edge_avg, graph_to_low_tri_mat_sparse, graph_tril
+from data.graph_utils import bi_direc_edge_avg, graph_to_spmatrix, symm_graph_tril
 
 class PreCorrector(eqx.Module):
     '''L = L + alpha * GNN(L)'''
-    NodeEncoder: eqx.Module
     EdgeEncoder: eqx.Module
     MessagePass: eqx.Module
     EdgeDecoder: eqx.Module
     alpha: jax.Array
 
-    def __init__(self, NodeEncoder, EdgeEncoder, MessagePass, EdgeDecoder, alpha):
-        super(CorrectionNet, self).__init__()
-        self.NodeEncoder = NodeEncoder
+    def __init__(self, EdgeEncoder, MessagePass, EdgeDecoder, alpha):
+        super(PreCorrector, self).__init__()
         self.EdgeEncoder = EdgeEncoder
         self.MessagePass = MessagePass
         self.EdgeDecoder = EdgeDecoder
         self.alpha = alpha
         return
     
-    def __call__(self, train_graph, bi_edges_indx):
-        nodes, edges_init, receivers, senders = train_graph
+    def __call__(self, train_graph):
+        nodes, edges_init, senders, receivers = train_graph
         norm = jnp.abs(edges_init).max()
         edges = edges_init / norm
         
-        nodes = self.NodeEncoder(nodes[None, ...])
         edges = self.EdgeEncoder(edges[None, ...])
-        nodes, edges, receivers, senders = self.MessagePass(nodes, edges, receivers, senders)
-        edges = bi_direc_edge_avg(edges, bi_edges_indx)
+        nodes, edges, senders, receivers = self.MessagePass(nodes, edges, senders, receivers)
         edges = self.EdgeDecoder(edges)[0, ...]
+        edges = edges_init + self.alpha * (edges * norm)
         
-        edges = edges * norm
-        edges = edges_init + self.alpha * edges
-        
-        nodes, edges, receivers, senders = graph_tril(nodes, jnp.squeeze(edges), receivers, senders)
-        low_tri = graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders)
+        nodes, edges, senders, receivers = symm_graph_tril(nodes, jnp.squeeze(edges), senders, receivers)
+        low_tri = graph_to_spmatrix(nodes, edges, senders, receivers)
         return low_tri
     
 class SimpleGNN(eqx.Module):
@@ -48,7 +42,7 @@ class SimpleGNN(eqx.Module):
     EdgeDecoder: eqx.Module
 
     def __init__(self, NodeEncoder, EdgeEncoder, MessagePass, EdgeDecoder):
-        super(PrecNet, self).__init__()
+        super(SimpleGNN, self).__init__()
         self.NodeEncoder = NodeEncoder
         self.EdgeEncoder = EdgeEncoder
         self.MessagePass = MessagePass
@@ -56,8 +50,8 @@ class SimpleGNN(eqx.Module):
         return    
     
     def __call__(self, train_graph, bi_edges_indx, lhs_graph):
-        lhs_nodes, lhs_edges, lhs_receivers, lhs_senders = lhs_graph
-        nodes, edges, receivers, senders = train_graph
+        lhs_nodes, lhs_edges, lhs_senders, lhs_receivers = lhs_graph
+        nodes, edges, senders, receivers = train_graph
         
          # Save main diagonal in initial lhs from PDE
         diag_edge_indx_lhs = jnp.diff(jnp.hstack([lhs_senders[:, None], lhs_receivers[:, None]]))
@@ -70,13 +64,13 @@ class SimpleGNN(eqx.Module):
                 
         nodes = self.NodeEncoder(nodes[None, ...])
         edges = self.EdgeEncoder(edges[None, ...])
-        nodes, edges, receivers, senders = self.MessagePass(nodes, edges, receivers, senders)
+        nodes, edges, senders, receivers = self.MessagePass(nodes, edges, senders, receivers)
         edges = bi_direc_edge_avg(edges, bi_edges_indx)
         edges = self.EdgeDecoder(edges)[0, ...]
         
         # Put the real diagonal into trained lhs
         edges = edges.at[diag_edge_indx].set(jnp.sqrt(diag_edge), mode='drop')
         
-        nodes, edges, receivers, senders = graph_tril(nodes, jnp.squeeze(edges), receivers, senders)
-        low_tri = graph_to_low_tri_mat_sparse(nodes, edges, receivers, senders)
+        nodes, edges, senders, receivers = symm_graph_tril(nodes, jnp.squeeze(edges), senders, receivers)
+        low_tri = graph_to_spmatrix(nodes, edges, senders, receivers)
         return low_tri

@@ -1,6 +1,5 @@
 from typing import Callable
 
-import jax
 from jax import vmap
 import jax.numpy as jnp
 import jax.tree_util as tree
@@ -24,14 +23,14 @@ class MessagePassing_StaticDiag(eqx.Module):
         self.nodes_init_fn = nodes_init_fn
         return        
         
-    def __call__(self, nodes, edges, receivers, senders):
+    def __call__(self, nodes, edges, senders, receivers):
         nodes = self.nodes_init_fn(nodes)
         for _ in range(self.mp_rounds):
-            nodes = self._update_nodes(nodes, edges, receivers, senders)
-            edges = self._update_edges(nodes, edges, receivers, senders)
-        return nodes, edges, receivers, senders
+            nodes = self._update_nodes(nodes, edges, senders, receivers)
+            edges = self._update_edges(nodes, edges, senders, receivers)
+        return nodes, edges, senders, receivers
     
-    def _update_nodes(self, nodes, edges, receivers, senders):
+    def _update_nodes(self, nodes, edges, senders, receivers):
         sum_n_node = tree.tree_leaves(nodes)[0].shape[1]
         edges_by_receivers = edges * nodes[:, receivers] # Elemet-wise e_{i,j,t}v_{j,t}
         
@@ -47,7 +46,7 @@ class MessagePassing_StaticDiag(eqx.Module):
         nodes = self.update_node_fn(jnp.concatenate([nodes, sent_attributes], axis=0)) #jnp.concatenate([nodes, sent_attributes, received_attributes], axis=0))
         return nodes
     
-    def _update_edges(self, nodes, edges, receivers, senders):
+    def _update_edges(self, nodes, edges, senders, receivers):
         sent_attributes = tree.tree_map(lambda n: n[:, senders], nodes)
         received_attributes = tree.tree_map(lambda n: n[:, receivers], nodes)
 
@@ -60,17 +59,18 @@ class MessagePassing_StaticDiag(eqx.Module):
             sent_attributes[:, non_diag_edge_idx],
             received_attributes[:, non_diag_edge_idx]
         ], axis=0)
-        edges_upd = self.update_edge_fn(feat_in)        
+        edges_upd = self.update_edge_fn(feat_in)
         edges = edges.at[:, non_diag_edge_idx].set(edges_upd, mode='drop')
         return edges
-    
+
+
 class MessagePassing_NotStaticDiag(MessagePassing_StaticDiag):
     def __init__(self, update_edge_fn, update_node_fn, mp_rounds,
                  nodes_init_fn, aggregate_edges_for_nodes_fn=segment_sum):
         super().__init__(update_edge_fn, update_node_fn, mp_rounds,
-                 nodes_init_fn, aggregate_edges_for_nodes_fn=segment_sum)
+                         nodes_init_fn, aggregate_edges_for_nodes_fn=segment_sum)
     
-    def _update_edges(self, nodes, edges, receivers, senders):
+    def _update_edges(self, nodes, edges, senders, receivers):
         sent_attributes = tree.tree_map(lambda n: n[:, senders], nodes)
         received_attributes = tree.tree_map(lambda n: n[:, receivers], nodes)
         
@@ -79,6 +79,5 @@ class MessagePassing_NotStaticDiag(MessagePassing_StaticDiag):
             sent_attributes,
             received_attributes,
         ], axis=0)
-        edges_upd = self.update_edge_fn(feat_in)        
-        edges = edges.at[:, non_diag_edge_idx].set(edges_upd, mode='drop')
+        edges = self.update_edge_fn(feat_in)        
         return edges
