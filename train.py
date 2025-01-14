@@ -6,7 +6,6 @@ from functools import partial
 import optax
 import equinox as eqx
 import jax.numpy as jnp
-from equinox.nn import Conv1d
 from jax import lax, random, jit
 from jax.experimental import sparse as jsparse
 
@@ -15,7 +14,7 @@ from loss import high_freq_loss, low_freq_loss
 from loss import compute_loss_precorrector, compute_loss_naivegnn
 
 from data.graph_utils import spmatrix_to_graph
-from architecture.fully_conected import FullyConnectedNet, ConstantConv1d
+from architecture.fully_conected import FullyConnectedNet
 from architecture.message_passing import MessagePassing_StaticDiag, MessagePassing_NotStaticDiag
 from architecture.neural_preconditioner_design import PreCorrector, NaiveGNN
 
@@ -27,69 +26,6 @@ BLANK_TRAIN_CONFIG = {
     'lr': '',
     'optim_params': '',
     'epoch_num': ''
-}
-
-DEFAULT_NAIVEGNN_CONFIG = {
-    'node_enc': {
-        'features': [1, 16, 16],
-        'N_layers': 2,
-        'layer_': ConstantConv1d
-    },
-    'edge_enc': {
-        'features': [1, 16, 16],
-        'N_layers': 2,
-        'layer_': ConstantConv1d
-    },
-    'edge_dec': {
-        'features': [16, 16, 1],
-        'N_layers': 2,
-        'layer_': ConstantConv1d
-    },
-    'mp': {
-        'edge_upd': {
-            'features': [48, 16, 16],
-            'N_layers': 2,
-            'layer_': ConstantConv1d
-        },
-        'node_upd': {
-            'features': [32, 16, 16],
-            'N_layers': 2,
-            'layer_': ConstantConv1d
-        },
-        'mp_rounds': 5
-    }
-}
-
-DEFAULT_PRECORRECTOR_CONFIG = {
-    'alpha': jnp.array([0.]),
-    'node_enc': {
-        'features': [1, 16, 16],
-        'N_layers': 2,
-        'layer_': Conv1d
-    },
-    'edge_enc': {
-        'features': [1, 16, 16],
-        'N_layers': 2,
-        'layer_': Conv1d
-    },
-    'edge_dec': {
-        'features': [16, 16, 1],
-        'N_layers': 2,
-        'layer_': Conv1d
-    },
-    'mp': {
-        'edge_upd': {
-            'features': [48, 16, 16],
-            'N_layers': 2,
-            'layer_': Conv1d
-        },
-        'node_upd': {
-            'features': [32, 16, 16],
-            'N_layers': 2,
-            'layer_': Conv1d
-        },
-        'mp_rounds': 5
-    }
 }
 
 def train(model, data, train_config):
