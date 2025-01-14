@@ -1,27 +1,15 @@
-import os
 import json
-from functools import partial
-
-import jax.numpy as jnp
-from jax import random, vmap, clear_caches
-from jax.experimental import sparse as jsparse
-import optax
-from equinox.nn import Conv1d
-
 import numpy as np
-import pandas as pd
-from scipy.sparse.linalg import LinearOperator
 from time import perf_counter
 
-from data.dataset import dataset_qtt
+import optax
+from jax import random, jit
+import jax.numpy as jnp
+from equinox.nn import Conv1d
+from jax.experimental import sparse as jsparse
+
+from data.graph_utils import spmatrix_to_graph
 from model import MessagePassing, FullyConnectedNet, PrecNet, ConstantConv1d, CorrectionNet, PrecNetNorm
-
-from linsolve.scipy_linsolve import batched_cg_scipy, solve_precChol, make_Chol_prec_from_bcoo
-from utils import iter_per_residual, id_generator, jBCOO_to_scipyCSR
-from data.graph_utils import direc_graph_from_linear_system_sparse
-from train import train
-
-from scipy.sparse import coo_matrix
 
 BLANK_TRAIN_CONFIG = {
     'loss_type': '',
@@ -139,8 +127,8 @@ def make_PreCorrector(key, config):
         update_node_fn = FullyConnectedNet(**config['mp']['node_upd'], key=subkeys[4]),
         mp_rounds = config['mp']['mp_rounds']
     )
-    model = PreCorrector(NodeEncoder=NodeEncoder, EdgeEncoder=EdgeEncoder,
-                         EdgeDecoder=EdgeDecoder, MessagePass=MessagePass, alpha=config['alpha'])
+    model = PreCorrector(EdgeEncoder=EdgeEncoder, EdgeDecoder=EdgeDecoder,
+                         MessagePass=MessagePass, alpha=config['alpha'])
     return model
     
 def save_hp_model(filename, hyperparams, model):
@@ -148,10 +136,10 @@ def save_hp_model(filename, hyperparams, model):
         hyperparam_str = json.dumps(hyperparams)
         f.write((hyperparam_str + "\n").encode())
         eqx.tree_serialise_leaves(f, model)
-    return
+        return
 
-def load_hp_model(filename, make_model, seed):
+def load_hp_model(filename, make_model):
     with open(filename, "rb") as f:
         hyperparams = json.loads(f.readline().decode())
-        model = make_model(key=random.PRNGKey(seed), config)
-        return eqx.tree_deserialise_leaves(f, model)
+        model = make_model(key=random.PRNGKey(0), hyperparams)
+        return eqx.tree_deserialise_leaves(f, model), hyperparams
