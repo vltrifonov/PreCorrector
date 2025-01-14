@@ -1,13 +1,14 @@
 import os
+from time import perf_counter
 
-from scipy.sparse import spdiags, triu, linalg as splinalg
-import numpy as np
-import parafields
 import ilupp
+import parafields
+import numpy as np
+from scipy.sparse import spdiags, triu, linalg as splinalg
 
 import jax.numpy as jnp
-from jax.experimental import sparse as jsparse
 from jax import device_put, random
+from jax.experimental import sparse as jsparse
 
 from utils import jBCOO_to_scipyCSR
 from data.graph_utils import spmatrix_to_graph, bi_direc_indx
@@ -97,56 +98,47 @@ def poisson(n_samples, grid, tril_func=lambda *args: None, rhs_func=lambda grid:
     
 ## Functions for padding linear systems with IC(0) and ICt
 def pad_lhs_FD(A, b):
-    A_pad = A
-    
-    _, _, senders, receivers = spmatrix_to_graph(A_pad, b)
+    _, _, senders, receivers = spmatrix_to_graph(A, b)
     bi_edges = bi_direc_indx(receivers[0, ...], senders[0, ...], b.shape[-1]) 
     bi_edges = jnp.repeat(bi_edges[None, ...], b.shape[0], axis=0)
-    return A_pad, bi_edges
+    t_ls = 0
+    return A_pad, bi_edges, np.mean(t_ls), np.std(t_ls)
 
 def pad_lhs_LfromIС0(A, b):
     N = A.shape[0]
     A_pad = []
+    t_ls = []
     for n in range(N):
+        s = perf_counter()
         L = ilupp.ichol0(jBCOO_to_scipyCSR(A[n, ...]))
-        A_pad.append(jsparse.BCOO.from_scipy_sparse(L + triu(L.T, k=1)).sort_indices()[None, ...])
+        t_ls.append(perf_counter - s)
+        A_pad.append(jsparse.BCOO.from_scipy_sparse(L).sort_indices()[None, ...])
     A_pad = device_put(jsparse.bcoo_concatenate(A_pad, dimension=0))
     
     _, _, senders, receivers = spmatrix_to_graph(A_pad, b)
-    bi_edges = bi_direc_indx(receivers[0, ...], senders[0, ...], b.shape[-1]) 
-    bi_edges = jnp.repeat(bi_edges[None, ...], b.shape[0], axis=0)
-    return A_pad, bi_edges
+    bi_edges = None
+    return A_pad, bi_edges, np.mean(t_ls), np.std(t_ls)
 
 def pad_lhs_LfromICt(A, b, fill_factor, threshold):
     N = A.shape[0]
     A_pad = []
-    bi_edges = []
-    max_len, max_len_biedg = 0, 0
-
+    t_ls = []
+    max_len = 0
     for n in range(N):
+        s = perf_counter()
         L = ilupp.icholt(jBCOO_to_scipyCSR(A[n, ...]), add_fill_in=fill_factor, threshold=threshold)
-        A_pad.append(jsparse.BCOO.from_scipy_sparse(L + triu(L.T, k=1)).sort_indices())
-        _, _, senders, receivers = spmatrix_to_graph(A_pad[n][None, ...], b[n][None, ...])
-        bi_edges.append(bi_direc_indx(receivers[0, ...], senders[0, ...], b.shape[-1])
-        
+        t_ls.append(perf_counter - s)
+        A_pad.append(jsparse.BCOO.from_scipy_sparse(L).sort_indices())
         len_i = A_pad[-1].data.shape[0]
-        len_biedg_i = bi_edges[-1].shape[0]
         max_len = len_i if len_i > max_len else max_len
-        max_len_biedg = len_biedg_i if len_biedg_i > max_len_biedg else max_len_biedg
         
     for n in range(N):
         A_pad_i = A_pad[n]
-        bi_edge_i = bi_edges[n]
         delta_len = max_len - A_pad_i.data.shape[0]
-        delta_biedg_len = max_len_biedg - bi_edge_i.shape[0]
-        
         A_pad_i.data = jnp.pad(A_pad_i.data, (0, delta_len), mode='constant', constant_values=(0))
         A_pad_i.indices = jnp.pad(A_pad_i.indices, [(0, delta_len), (0, 0)], mode='constant', constant_values=(A_pad_i.data.shape[0]))
-        bi_edge_i = jnp.pad(bi_edge_i, [(0, delta_biedg_len), (0, 0)], mode='constant', constant_values=(A_pad_i.data.shape[0]))
-
         A_pad[n] = A_pad_i[None, ...]
-        bi_edges[n] = bi_edge_i[None, ...]
         
     A_pad = device_put(jsparse.bcoo_concatenate(A_pad, dimension=0))
-    bi_edges = device_put(jnp.concatenate(bi_edges, axis=0))
-    return A_pad, bi_edges
+    bi_edges = None
+    return A_pad, bi_edges, np.mean(t_ls), np.std(t_ls)
