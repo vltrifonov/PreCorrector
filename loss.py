@@ -16,7 +16,7 @@ def high_freq_loss(L, A, x, b):
     L should be sparse (and not batched since function is vmaped)'''
     return jnp.square(jnp.linalg.norm(L @ (L.T @ b) - A @ b, ord=2))
 
-def compute_loss_precorrector(model, X, y, loss_fn, reduction=jnp.mean):
+def compute_loss_precorrector(model, X, loss_fn, reduction=jnp.mean):
     '''Placeholder for supervised learning `y`.
        Positions in `X`:
          X[0] - lhs A.
@@ -30,7 +30,7 @@ def compute_loss_precorrector(model, X, y, loss_fn, reduction=jnp.mean):
     loss = vmap(loss_fn, in_axes=(0, 0, 0, 0), out_axes=(0))(L, X[0], X[4], X[2])
     return reduction(loss)
 
-def compute_loss_naivegnn(model, X, y, loss_fn, reduction=jnp.mean):
+def compute_loss_naivegnn(model, X, loss_fn, reduction=jnp.mean):
     '''Placeholder for supervised learning `y`.
        Positions in `X`:
          X[0] - lhs A.
