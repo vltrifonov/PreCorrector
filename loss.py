@@ -26,7 +26,7 @@ def compute_loss_precorrector(model, X, loss_fn, reduction=jnp.mean):
          X[4] - solution of linear system x.
      '''
     nodes, edges, senders, receivers = spmatrix_to_graph(X[1], X[2])
-    L = vmap(model, in_axes=(0, 0, 0, 0), out_axes=(0))(nodes, edges, senders, receivers)
+    L = vmap(model, in_axes=(0), out_axes=(0))((nodes, edges, senders, receivers))
     loss = vmap(loss_fn, in_axes=(0, 0, 0, 0), out_axes=(0))(L, X[0], X[4], X[2])
     return reduction(loss)
 

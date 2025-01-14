@@ -109,14 +109,15 @@ def pad_lhs_LfromIС0(A, b):
     A_pad = []
     t_ls = []
     for n in range(N):
+        A_scipy = jBCOO_to_scipyCSR(A[n, ...])
         s = perf_counter()
-        L = ilupp.ichol0(jBCOO_to_scipyCSR(A[n, ...]))
-        t_ls.append(perf_counter - s)
+        L = ilupp.ichol0(A_scipy)
+        t_ls.append(perf_counter() - s)
         A_pad.append(jsparse.BCOO.from_scipy_sparse(L).sort_indices()[None, ...])
     A_pad = device_put(jsparse.bcoo_concatenate(A_pad, dimension=0))
     
     _, _, senders, receivers = spmatrix_to_graph(A_pad, b)
-    bi_edges = None
+    bi_edges = jnp.array([-42])
     return A_pad, bi_edges, np.mean(t_ls), np.std(t_ls)
 
 def pad_lhs_LfromICt(A, b, fill_factor, threshold):
@@ -125,8 +126,9 @@ def pad_lhs_LfromICt(A, b, fill_factor, threshold):
     t_ls = []
     max_len = 0
     for n in range(N):
+        A_scipy = jBCOO_to_scipyCSR(A[n, ...])
         s = perf_counter()
-        L = ilupp.icholt(jBCOO_to_scipyCSR(A[n, ...]), add_fill_in=fill_factor, threshold=threshold)
+        L = ilupp.icholt(A_scipy, add_fill_in=fill_factor, threshold=threshold)
         t_ls.append(perf_counter - s)
         A_pad.append(jsparse.BCOO.from_scipy_sparse(L).sort_indices())
         len_i = A_pad[-1].data.shape[0]
@@ -140,5 +142,5 @@ def pad_lhs_LfromICt(A, b, fill_factor, threshold):
         A_pad[n] = A_pad_i[None, ...]
         
     A_pad = device_put(jsparse.bcoo_concatenate(A_pad, dimension=0))
-    bi_edges = None
+    bi_edges = jnp.array([-42])
     return A_pad, bi_edges, np.mean(t_ls), np.std(t_ls)

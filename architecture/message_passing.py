@@ -6,8 +6,8 @@ import jax.tree_util as tree
 from jax.ops import segment_sum
 import equinox as eqx
 
-nodes_init_nodes_val = lambda nodes: nodes
-nodes_init_ones = lambda nodes: jnp.ones_like(nodes)
+nodes_init_nodes_val = lambda nodes: nodes.reshape([1, -1])
+nodes_init_ones = lambda nodes: jnp.ones_like(nodes).reshape([1, -1])
 
 class MessagePassing_StaticDiag(eqx.Module):
     update_edge_fn: eqx.Module
@@ -34,7 +34,7 @@ class MessagePassing_StaticDiag(eqx.Module):
         return nodes, edges, senders, receivers
     
     def _update_nodes(self, nodes, edges, senders, receivers):
-        sum_n_node = tree.tree_leaves(nodes)[0].shape[1]
+        sum_n_node = tree.tree_leaves(nodes)[0].shape[-1]
         edges_by_receivers = edges * nodes[:, receivers] # Elemet-wise e_{i,j,t}v_{j,t}
         
         sent_attributes = vmap(

@@ -10,7 +10,7 @@ from utils import jBCOO_to_scipyCSR
 
 def batched_cg_scipy(A, b, pre_time, P=None, atol=1e-12, maxiter=1000, thresholds=[1e-3, 1e-6, 1e-9, 1e-12]):
     # results_array \in R^{linsystem_num x threshold_num x 2}, where 2 is for residulas and time to tol
-    results_array = np.full([A.shape[0], len(thresholds), 2], -42)
+    iter_time_per_res = np.full([A.shape[0], len(thresholds), 2], -42.)
     P = P if P else [None]*A.shape[0]
     
     for i in range(A.shape[0]):
@@ -19,23 +19,23 @@ def batched_cg_scipy(A, b, pre_time, P=None, atol=1e-12, maxiter=1000, threshold
         
         for j, t in enumerate(thresholds):
             try:
-                iters_to_res = np.where(cg_res <= t)[0][0]
-                time_to_res = cg_time[iters_to_res]
+                iters_to_res = np.where(res_i <= t)[0][0]
+                time_to_res = time_i[iters_to_res]
             except:
                 iters_to_res, time_to_res = np.nan, np.nan
             
             iter_time_per_res[i, j, 0] = iters_to_res + 1
             iter_time_per_res[i, j, 1] = time_to_res + pre_time
-    
+    print(iter_time_per_res)
     iters_mean, iters_std = {}, {}
     time_mean, time_std = {}, {}
     nan_flag = {}
     for j, t in enumerate(thresholds):
-        iters_mean[t] = np.nanmean(results_array[:, j, 0])
-        iters_std[t] = np.nanstd(results_array[:, j, 0])
-        time_mean[t] = np.nanmean(results_array[:, j, 1])
-        time_std[t] = np.nanstd(results_array[:, j, 1])
-        nan_flag[t] = np.sum(np.isnan(results_array[:, j, 0]))
+        iters_mean[t] = np.nanmean(iter_time_per_res[:, j, 0])
+        iters_std[t] = np.nanstd(iter_time_per_res[:, j, 0])
+        time_mean[t] = np.nanmean(iter_time_per_res[:, j, 1])
+        time_std[t] = np.nanstd(iter_time_per_res[:, j, 1])
+        nan_flag[t] = np.sum(np.isnan(iter_time_per_res[:, j, 0]))
     
     return iters_mean, iters_std, time_mean, time_std, nan_flag
 

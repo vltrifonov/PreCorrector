@@ -1,9 +1,4 @@
 import jax.numpy as jnp
-from equinox.nn import Conv1d
-
-from architecture.fully_conected import ConstantConv1d
-from utils import DEFAULT_NAIVEGNN_CONFIG, DEFAULT_PRECORRECTOR_CONFIG
-
 
 blank_config = {
     'model_path': '', # Path to save/load trained model. Can be empty for training from scratch (meaning the model is not saved)
@@ -40,63 +35,55 @@ blank_data_config = {
 }
 
 default_naivegnn_config = {
+    'layer_type': 'ConstantConv1d',
     'node_enc': {
         'features': [1, 16, 16],
         'N_layers': 2,
-        'layer_': ConstantConv1d
     },
     'edge_enc': {
         'features': [1, 16, 16],
         'N_layers': 2,
-        'layer_': ConstantConv1d
     },
     'edge_dec': {
         'features': [16, 16, 1],
         'N_layers': 2,
-        'layer_': ConstantConv1d
     },
     'mp': {
         'edge_upd': {
             'features': [48, 16, 16],
             'N_layers': 2,
-            'layer_': ConstantConv1d
         },
         'node_upd': {
             'features': [32, 16, 16],
             'N_layers': 2,
-            'layer_': ConstantConv1d
         },
         'mp_rounds': 5
     }
 }
 
 default_precorrector_config = {
-    'alpha': jnp.array([0.]),
-    'node_enc': {
-        'features': [1, 16, 16],
-        'N_layers': 2,
-        'layer_': nn.Conv1d
-    },
+    'layer_type': 'Conv1d',
+    'alpha': 0.,
+#     'node_enc': {
+#         'features': [1, 16, 16],
+#         'N_layers': 2,
+#     },
     'edge_enc': {
         'features': [1, 16, 16],
         'N_layers': 2,
-        'layer_': nn.Conv1d
     },
     'edge_dec': {
         'features': [16, 16, 1],
         'N_layers': 2,
-        'layer_': nn.Conv1d
     },
     'mp': {
         'edge_upd': {
-            'features': [48, 16, 16],
+            'features': [18, 16, 16],
             'N_layers': 2,
-            'layer_': nn.Conv1d
         },
         'node_upd': {
-            'features': [32, 16, 16],
+            'features': [17, 1, 1],
             'N_layers': 2,
-            'layer_': nn.Conv1d
         },
         'mp_rounds': 5
     }
