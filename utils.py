@@ -15,72 +15,7 @@ import jax.numpy as jnp
 from jax import random, tree_util
 from jax.experimental import sparse as jsparse
 
-from architecture.fully_conected import ConstantConv1d
-
 pd.set_option('display.max_columns', 500)
-
-DEFAULT_NAIVEGNN_CONFIG = {
-    'node_enc': {
-        'features': [1, 16, 16],
-        'N_layers': 2,
-        'layer_': ConstantConv1d
-    },
-    'edge_enc': {
-        'features': [1, 16, 16],
-        'N_layers': 2,
-        'layer_': ConstantConv1d
-    },
-    'edge_dec': {
-        'features': [16, 16, 1],
-        'N_layers': 2,
-        'layer_': ConstantConv1d
-    },
-    'mp': {
-        'edge_upd': {
-            'features': [48, 16, 16],
-            'N_layers': 2,
-            'layer_': ConstantConv1d
-        },
-        'node_upd': {
-            'features': [32, 16, 16],
-            'N_layers': 2,
-            'layer_': ConstantConv1d
-        },
-        'mp_rounds': 5
-    }
-}
-
-DEFAULT_PRECORRECTOR_CONFIG = {
-    'alpha': jnp.array([0.]),
-    'node_enc': {
-        'features': [1, 16, 16],
-        'N_layers': 2,
-        'layer_': nn.Conv1d
-    },
-    'edge_enc': {
-        'features': [1, 16, 16],
-        'N_layers': 2,
-        'layer_': nn.Conv1d
-    },
-    'edge_dec': {
-        'features': [16, 16, 1],
-        'N_layers': 2,
-        'layer_': nn.Conv1d
-    },
-    'mp': {
-        'edge_upd': {
-            'features': [48, 16, 16],
-            'N_layers': 2,
-            'layer_': nn.Conv1d
-        },
-        'node_upd': {
-            'features': [32, 16, 16],
-            'N_layers': 2,
-            'layer_': nn.Conv1d
-        },
-        'mp_rounds': 5
-    }
-}
 
 def batch_indices(key, arr, batch_size):
     dataset_size = len(arr)

@@ -15,18 +15,8 @@ from loss import compute_loss_precorrector, compute_loss_naivegnn
 
 from data.graph_utils import spmatrix_to_graph
 from architecture.fully_conected import FullyConnectedNet
-from architecture.message_passing import MessagePassing_StaticDiag, MessagePassing_NotStaticDiag
 from architecture.neural_preconditioner_design import PreCorrector, NaiveGNN
-
-BLANK_TRAIN_CONFIG = {
-    'loss_type': '',
-    'model_type': '',
-    'batch_size': '',
-    'optimizer': '',
-    'lr': '',
-    'optim_params': '',
-    'epoch_num': ''
-}
+from architecture.message_passing import MessagePassing_StaticDiag, MessagePassing_NotStaticDiag
 
 def train(model, data, train_config):
     X_train, X_test = data
