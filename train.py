@@ -1,4 +1,5 @@
 import json
+import warnings
 import numpy as np
 from time import perf_counter
 from functools import partial
@@ -17,6 +18,25 @@ from data.graph_utils import spmatrix_to_graph
 from architecture.fully_conected import FullyConnectedNet
 from architecture.neural_preconditioner_design import PreCorrector, NaiveGNN
 from architecture.message_passing import MessagePassing_StaticDiag, MessagePassing_NotStaticDiag
+
+def train_inference_finetune(key, data, make_model, model_config, train_config, **, model_path, model_use, load_model, save_model):
+    assert model_path.endswith('.eqx')
+    model = make_model(key, model_config)
+    
+    if (model_use == 'train' or model_use == 'fine-tune') and os.path.isfile(model_path) and save_model:
+        warnings.warn("Warning: you will overwrite a trained model.")
+            
+    if model_use == 'inference' or model_use == 'fine-tune':
+        model, model_config = load_hp_and_model(model_path, make_model)
+        losses = np.nan
+        
+    if model_use == 'train' or model_use == 'fine-tune':
+        model, losses = train(model, data, train_config)
+    
+    if save_model:
+        save_hp_and_model(model_path, model_config, model):
+    
+    return model, losses, model_config    
 
 def train(model, data, train_config):
     X_train, X_test = data
@@ -117,14 +137,14 @@ def make_PreCorrector(key, config):
                          MessagePass=MessagePass, alpha=config['alpha'])
     return model
     
-def save_hp_model(filename, hyperparams, model):
+def save_hp_and_model(filename, hyperparams, model):
     with open(filename, "wb") as f:
         hyperparam_str = json.dumps(hyperparams)
         f.write((hyperparam_str + "\n").encode())
         eqx.tree_serialise_leaves(f, model)
         return
 
-def load_hp_model(filename, make_model):
+def load_hp_and_model(filename, make_model):
     with open(filename, "rb") as f:
         hyperparams = json.loads(f.readline().decode())
         model = make_model(key=random.PRNGKey(0), hyperparams)

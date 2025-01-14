@@ -102,7 +102,7 @@ def pad_lhs_FD(A, b):
     bi_edges = bi_direc_indx(receivers[0, ...], senders[0, ...], b.shape[-1]) 
     bi_edges = jnp.repeat(bi_edges[None, ...], b.shape[0], axis=0)
     t_ls = 0
-    return A_pad, bi_edges, np.mean(t_ls), np.std(t_ls)
+    return A_pad, bi_edges, 0, 0
 
 def pad_lhs_LfromIС0(A, b):
     N = A.shape[0]

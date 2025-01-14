@@ -13,10 +13,10 @@ def load_dataset(config, return_train, pde_type='elliptic'):
     
     N_samples = config['N_samples_train'] if return_train else config['N_samples_test']
     if pde_type == 'elliptic':
-        A, A_pad, b, x, bi_edges = elliptic_dataset_from_hard(return_train, N_samples, **config)
+        A, A_pad, b, x, bi_edges, pre_time_mean, pre_time_std = elliptic_dataset_from_hard(return_train, N_samples, **config)
     else:
         raise NotImplementedError
-    return A, A_pad, b, x, bi_edges
+    return A, A_pad, b, bi_edges, x, pre_time_mean, pre_time_std
     
 
 def elliptic_dataset_from_hard(return_train, N_samples, data_dir, pde, grid, variance,
@@ -53,5 +53,5 @@ def elliptic_dataset_from_hard(return_train, N_samples, data_dir, pde, grid, var
     A = vmap(make_BCOO, in_axes=(0, 0, None), out_axes=(0))(file['Aval'], file['Aind'], grid)[0:N_samples, ...]
     b = jnp.asarray(file['b'])[0:N_samples, ...]
     x = jnp.asarray(file['x'])[0:N_samples, ...]
-    A_pad, bi_edges = get_linsystem_pad(A, b)
-    return A, A_pad, b, x, bi_edges
+    A_pad, bi_edges, pre_time_mean, pre_time_std = get_linsystem_pad(A, b)
+    return A, A_pad, b, x, bi_edges, pre_time_mean, pre_time_std
