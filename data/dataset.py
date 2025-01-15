@@ -24,12 +24,12 @@ def elliptic_dataset_from_hard(return_train, N_samples, data_dir, pde, grid, var
     assert precision in {'f32', 'f64'}
     assert grid in {32, 64, 128}
     assert pde in {'poisson', 'div_k_grad'}
-    assert isinstance(variance, float) and variance > 0
     data_dir = os.path.join(data_dir, 'paper_datasets' if precision == 'f32' else 'paper_datasets_f64')
     cov_model = 'Gauss'
     
     name = pde + str(grid)    
     if pde == 'div_k_grad':
+        assert isinstance(variance, float) and variance > 0
         name += '_' + cov_model + str(variance)
     
     if lhs_type == 'fd':

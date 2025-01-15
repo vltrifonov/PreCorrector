@@ -129,7 +129,7 @@ def pad_lhs_LfromICt(A, b, fill_factor, threshold):
         A_scipy = jBCOO_to_scipyCSR(A[n, ...])
         s = perf_counter()
         L = ilupp.icholt(A_scipy, add_fill_in=fill_factor, threshold=threshold)
-        t_ls.append(perf_counter - s)
+        t_ls.append(perf_counter() - s)
         A_pad.append(jsparse.BCOO.from_scipy_sparse(L).sort_indices())
         len_i = A_pad[-1].data.shape[0]
         max_len = len_i if len_i > max_len else max_len
