@@ -8,14 +8,18 @@ from functools import partial
 import inspect
 from utils import jBCOO_to_scipyCSR
 
-def batched_cg_scipy(A, b, pre_time, P=None, atol=1e-12, maxiter=1000, thresholds=[1e-3, 1e-6, 1e-9, 1e-12]):
+def batched_cg_scipy(A, b, pre_time, x0, key=None, P=None, atol=1e-12, maxiter=1000, thresholds=[1e-3, 1e-6, 1e-9, 1e-12]):
     # results_array \in R^{linsystem_num x threshold_num x 2}, where 2 is for residulas and time to tol
+    assert (x0 == 'random') or (x0 == None)
+    if x0 == 'random':
+        x0 = np.asarray(random.normal(key, b.shape[-1:]))
+        
     iter_time_per_res = np.full([A.shape[0], len(thresholds), 2], -42.)
     P = P if P else [None]*A.shape[0]
     
     for i in range(A.shape[0]):
         A_i, b_i, P_i, = A[i, ...], b[i, ...], P[i]
-        _, res_i, time_i = cg_scipy(jBCOO_to_scipyCSR(A_i), b_i, P_i, atol=atol, maxiter=maxiter)        
+        _, res_i, time_i = cg_scipy(jBCOO_to_scipyCSR(A_i), b_i, P_i, atol=atol, maxiter=maxiter, x0=x0)        
         
         for j, t in enumerate(thresholds):
             try:
@@ -26,20 +30,22 @@ def batched_cg_scipy(A, b, pre_time, P=None, atol=1e-12, maxiter=1000, threshold
             
             iter_time_per_res[i, j, 0] = iters_to_res + 1
             iter_time_per_res[i, j, 1] = time_to_res + pre_time
-    print(iter_time_per_res)
-    iters_mean, iters_std = {}, {}
-    time_mean, time_std = {}, {}
-    nan_flag = {}
-    for j, t in enumerate(thresholds):
-        iters_mean[t] = np.nanmean(iter_time_per_res[:, j, 0])
-        iters_std[t] = np.nanstd(iter_time_per_res[:, j, 0])
-        time_mean[t] = np.nanmean(iter_time_per_res[:, j, 1])
-        time_std[t] = np.nanstd(iter_time_per_res[:, j, 1])
-        nan_flag[t] = np.sum(np.isnan(iter_time_per_res[:, j, 0]))
-    
-    return iters_mean, iters_std, time_mean, time_std, nan_flag
 
-def cg_scipy(A, b, P, atol, maxiter):
+    iters_stats, time_stats, nan_flag = {}, {}, {}
+    for j, t in enumerate(thresholds):
+        iters_stats[t] = [
+            np.round(np.nanmean(iter_time_per_res[:, j, 0]), 1),
+            np.round(np.nanstd(iter_time_per_res[:, j, 0]), 2)
+        ]
+        time_stats[t] = [
+            np.round(np.nanmean(iter_time_per_res[:, j, 1]), 4),
+            np.round(np.nanstd(iter_time_per_res[:, j, 1]), 5)
+        ]
+        nan_flag[t] = np.sum(np.isnan(iter_time_per_res[:, j, 0]))
+
+    return iters_stats, time_stats, nan_flag
+
+def cg_scipy(A, b, P, atol, maxiter, x0):
     res_nonlocal = []
     time_per_iter = []
     def residuals_callback(xk):
@@ -48,7 +54,7 @@ def cg_scipy(A, b, P, atol, maxiter):
         peek = inspect.currentframe().f_back
         res_nonlocal.append(np.linalg.norm(peek.f_locals['r']))
     
-    x0 = None # Initialization with zero vector. Always x0 = None
+#     x0 = None # Initialization with zero vector. Always x0 = None
     t_start = perf_counter()
     solution, info = cg(A, np.array(b, dtype=np.float64), M=P, callback=residuals_callback,
                         rtol=0, atol=atol, maxiter=maxiter, x0=x0)

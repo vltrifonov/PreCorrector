@@ -3,7 +3,6 @@ import jax.numpy as jnp
 blank_config = {
     'model_path': '', # Path to save/load trained model. Can be empty for training from scratch (meaning the model is not saved)
     'model_use': '', # {'train', 'inference', 'fine-tune'}
-    'load_model': '', # If True, model is loaded from `model_path`. `model_path` must be a path to the valid model for loading model
     'save_model': '', # If True, model is saved to `model_path`. If `model_path` already exists, it will be overwritten    
     'cg_maxiter': '', # Maximum number of CG itertaions for preconditioner validation
     'data_config': '', # Config for data loading

@@ -21,7 +21,7 @@ from architecture.neural_preconditioner_design import PreCorrector, NaiveGNN
 from architecture.message_passing import MessagePassing_StaticDiag, MessagePassing_NotStaticDiag
 from architecture.message_passing import nodes_init_nodes_val, nodes_init_ones
 
-def train_inference_finetune(key, data, make_model, model_config, train_config, model_path, model_use, load_model, save_model):
+def train_inference_finetune(key, data, make_model, model_config, train_config, model_path, model_use, save_model):
     assert model_path.endswith('.eqx')
     model = make_model(key, model_config)
     
