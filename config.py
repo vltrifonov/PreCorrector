@@ -7,6 +7,7 @@ blank_config = {
     'model_use': '', # {'train', 'inference', 'fine-tune'}
     'save_model': '', # If True, model is saved to `model_path`. If `model_path` already exists, it will be overwritten    
     'cg_maxiter': '', # Maximum number of CG itertaions for preconditioner validation
+    'cg_atol': '', # Absolute threshold tolerance for CG 
     'data_config': '', # Config for data loading
     'model_config': '', # Config for neural preconditioner design model
     'train_config': '', # Config for training,
