@@ -1,18 +1,21 @@
 import jax.numpy as jnp
 
 blank_config = {
-    'model_path': '', # Path to save/load trained model. Can be empty for training from scratch (meaning the model is not saved)
+    'path': '', # Path to the project
+    'folder': '', # Folder to save/load trained model
+    'name': '', # Model (run) name
     'model_use': '', # {'train', 'inference', 'fine-tune'}
     'save_model': '', # If True, model is saved to `model_path`. If `model_path` already exists, it will be overwritten    
     'cg_maxiter': '', # Maximum number of CG itertaions for preconditioner validation
     'data_config': '', # Config for data loading
     'model_config': '', # Config for neural preconditioner design model
-    'train_config': '' # Config for training
+    'train_config': '', # Config for training,
+    'seed': ''
 }
 
 blank_train_config = {
+    'model_type': 'naivegnn',
     'loss_type': '', # {'high_freq_loss', 'low_freq_loss'}
-    'model_type': '', # {'naivegnn', 'precorrector'}
     'batch_size': '', # int > 0 
     'optimizer': '', # Optax optimizer instance
     'lr': '', # float > 0
@@ -21,7 +24,7 @@ blank_train_config = {
 }
 
 blank_data_config = {
-    'data_dir': '', # path to dataset directory
+    'data_dir': '', # Path to the folder with dataset directory
     'pde': '',   # 'div_k_grad', 'possion'
     'grid': '', # {32, 64, 128}
     'variance': '', # {0.1, 0.5, 0.7}

@@ -53,7 +53,7 @@ def cg_scipy(A, b, P, atol, maxiter, x0):
         time_per_iter.append(perf_counter())
         peek = inspect.currentframe().f_back
         res_nonlocal.append(np.linalg.norm(peek.f_locals['r']))
-    
+
 #     x0 = None # Initialization with zero vector. Always x0 = None
     t_start = perf_counter()
     solution, info = cg(A, np.array(b, dtype=np.float64), M=P, callback=residuals_callback,

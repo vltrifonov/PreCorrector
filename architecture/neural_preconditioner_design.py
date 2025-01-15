@@ -28,11 +28,11 @@ class PreCorrector(eqx.Module):
         nodes, edges, senders, receivers = self.MessagePass(nodes, edges, senders, receivers)
         edges = self.EdgeDecoder(edges)[0, ...]
         edges = edges_init + self.alpha * (edges * norm)
-        
+
 #         nodes, edges, senders, receivers = symm_graph_tril(nodes, jnp.squeeze(edges), senders, receivers)
         low_tri = graph_to_spmatrix(nodes, edges, senders, receivers)
         return low_tri
-    
+
 class NaiveGNN(eqx.Module):
     '''GNN operates on A.
     Perseving diagonal as: diag(A) = diag(D) from A = LDL^T'''

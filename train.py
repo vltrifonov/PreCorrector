@@ -161,7 +161,7 @@ def make_PreCorrector(key, config):
     model = PreCorrector(EdgeEncoder=EdgeEncoder, EdgeDecoder=EdgeDecoder,
                          MessagePass=MessagePass, alpha=jnp.array([config['alpha']]))
     return model
-    
+
 def save_hp_and_model(filename, hyperparams, model):
     with open(filename, "wb") as f:
         hyperparam_str = json.dumps(hyperparams)
