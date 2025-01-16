@@ -15,7 +15,7 @@ blank_config = {
 }
 
 blank_train_config = {
-    'model_type': 'naivegnn',
+    'model_type': '', # {'naivegnn', 'precorrector', 'precorrector_rhs_ones'}
     'loss_type': '', # {'high_freq_loss', 'low_freq_loss'}
     'batch_size': '', # int > 0 
     'optimizer': '', # Optax optimizer instance

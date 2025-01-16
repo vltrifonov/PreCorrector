@@ -14,7 +14,8 @@ from data.dataset import load_dataset
 from data.graph_utils import spmatrix_to_graph
 from config import default_precorrector_config
 from scipy_linsolve import make_Chol_prec_from_bcoo, batched_cg_scipy
-from train import construction_time_with_gnn, train_inference_finetune, make_PreCorrector, make_NaiveGNN
+from train import construction_time_with_gnn, train_inference_finetune
+from train import make_PreCorrector_rhsOnes, make_PreCorrector, make_NaiveGNN
 from utils import id_generator
 
 def grid_train(base_config, params_grid):
@@ -80,8 +81,14 @@ def script_train(config, return_meta_data=False):
     model_config = config['model_config']
     train_config = config['train_config']
     
-    make_model = make_PreCorrector if train_config['model_type'] == 'precorrector' else make_NaiveGNN
-    
+    if train_config['model_type'] == 'naivegnn':
+        make_model = make_NaiveGNN
+    elif train_config['model_type'] == 'precorrector':
+        make_model = make_PreCorrector
+    elif train_config['model_type'] == 'precorrector_rhs_ones':
+        make_model = make_PreCorrector_rhsOnes
+    else:
+        raise
     base_dir = os.path.join(config['path'], config['folder'], config['name'])
     try: os.mkdir(base_dir)
     except: pass
@@ -137,12 +144,15 @@ def script_train(config, return_meta_data=False):
                                                     train_config, model_path=model_file,
                                                     model_use=config['model_use'], save_model=config['save_model'])
         training_time = perf_counter() - s
-        alpha = f'{model.alpha.item():.4f}' if train_config['model_type'] == 'precorrector' else '-'
+        if train_config['model_type'] != 'naivegnn':
+            alpha = f'{model.alpha.item():.4f}' 
+        else:
+            alpha = '-'
         
         
         logging.info(f'Model is trained in {training_time:.3e} sec.')
         logging.info(f"GNN's alpha = {alpha}.")
-        logging.info(f'First and last losses: train = [{losses[0][0]:.3e}, {losses[0][-1]:.3e}], test = [{losses[1][0]:.3e}, {losses[1][-1]:.3e}]\n.')
+        logging.info(f'First and last losses: train = [{losses[0][0]:.3e}, {losses[0][-1]:.3e}], test = [{losses[1][0]:.3e}, {losses[1][-1]:.3e}].\n')
         jnp.savez(loss_file, train_loss=losses[0], test_loss=losses[1])
     except Exception as e:
         logging.critical(f'Script failed on model training.\n{e}\n\n\n')
@@ -180,8 +190,8 @@ def script_train(config, return_meta_data=False):
     # CG with classical prec
     try:
         iters_stats_class, time_stats_class, nan_flag_class = batched_cg_scipy(A_test, b_test, class_time_mean_test, 'random',
-                                                                         key, P_class, config['cg_atol'],
-                                                                         config['cg_maxiter'], thresholds=[1e-3, 1e-6, 1e-9, 1e-12])
+                                                                               key, P_class, config['cg_atol'],
+                                                                               config['cg_maxiter'], thresholds=[1e-3, 1e-6, 1e-9, 1e-12])
         logging.info('CG with classical prec is finished:')
         logging.info(f' iterations to atol([mean, std]): %s;', iters_stats_class)
         logging.info(f' time to atol([mean, std]): %s;', time_stats_class)
@@ -224,15 +234,15 @@ def script_train(config, return_meta_data=False):
             'time_data': f'{data_time:.3e}',
             'time_train': f'{training_time:.3e}',
             # ([mean, std] with GNN, [mean, std] with classical prec)
-            'iters_1e_3': f'([{iters_stats[1e-3][0]:.1f}, {iters_stats[1e-3][1]:.2f}], [{iters_stats_class[1e-3][0]:.1f}, {iters_stats_class[1e-3][1]:.2f}])',
-            'iters_1e_6': f'([{iters_stats[1e-6][0]:.1f}, {iters_stats[1e-6][1]:.2f}], [{iters_stats_class[1e-6][0]:.1f}, {iters_stats_class[1e-6][1]:.2f}])',
-            'iters_1e_9': f'([{iters_stats[1e-9][0]:.1f}, {iters_stats[1e-9][1]:.2f}], [{iters_stats_class[1e-9][0]:.1f}, {iters_stats_class[1e-9][1]:.2f}])',
-            'iters_1e_12': f'([{iters_stats[1e-12][0]:.1f}, {iters_stats[1e-12][1]:.2f}], [{iters_stats_class[1e-12][0]:.1f}, {iters_stats_class[1e-12][1]:.2f}])',
+            'iters_1e_3': f'[{iters_stats[1e-3][0]:.1f}, {iters_stats[1e-3][1]:.2f}], [{iters_stats_class[1e-3][0]:.1f}, {iters_stats_class[1e-3][1]:.2f}]',
+            'iters_1e_6': f'[{iters_stats[1e-6][0]:.1f}, {iters_stats[1e-6][1]:.2f}], [{iters_stats_class[1e-6][0]:.1f}, {iters_stats_class[1e-6][1]:.2f}]',
+            'iters_1e_9': f'[{iters_stats[1e-9][0]:.1f}, {iters_stats[1e-9][1]:.2f}], [{iters_stats_class[1e-9][0]:.1f}, {iters_stats_class[1e-9][1]:.2f}]',
+            'iters_1e_12': f'[{iters_stats[1e-12][0]:.1f}, {iters_stats[1e-12][1]:.2f}], [{iters_stats_class[1e-12][0]:.1f}, {iters_stats_class[1e-12][1]:.2f}]',
             # ([mean, std] with GNN, [mean, std] with classical prec)
-            'time_1e_3': f'([{time_stats[1e-3][0]:.1f}, {time_stats_class[1e-3][1]:.2f}], [{time_stats[1e-3][0]:.1f}, {time_stats_class[1e-3][1]:.2f}])',
-            'time_1e_6': f'([{time_stats[1e-6][0]:.1f}, {time_stats_class[1e-6][1]:.2f}], [{time_stats[1e-6][0]:.1f}, {time_stats_class[1e-6][1]:.2f}])',
-            'time_1e_9': f'([{time_stats[1e-9][0]:.1f}, {time_stats_class[1e-9][1]:.2f}], [{time_stats[1e-9][0]:.1f}, {time_stats_class[1e-9][1]:.2f}])',
-            'time_1e_12': f'([{time_stats[1e-12][0]:.1f}, {time_stats_class[1e-12][1]:.2f}], [{time_stats[1e-12][0]:.1f}, {time_stats_class[1e-12][1]:.2f}])',
+            'time_1e_3': f'[{time_stats[1e-3][0]:.4f}, {time_stats_class[1e-3][1]:.4f}], [{time_stats[1e-3][0]:.4f}, {time_stats_class[1e-3][1]:.4f}]',
+            'time_1e_6': f'[{time_stats[1e-6][0]:.4f}, {time_stats_class[1e-6][1]:.4f}], [{time_stats[1e-6][0]:.4f}, {time_stats_class[1e-6][1]:.4f}]',
+            'time_1e_9': f'[{time_stats[1e-9][0]:.4f}, {time_stats_class[1e-9][1]:.4f}], [{time_stats[1e-9][0]:.4f}, {time_stats_class[1e-9][1]:.4f}]',
+            'time_1e_12': f'[{time_stats[1e-12][0]:.4f}, {time_stats_class[1e-12][1]:.4f}], [{time_stats[1e-12][0]:.4f}, {time_stats_class[1e-12][1]:.4f}]',
             # [with GNN, with classical prec]
             'nans_1e_3': f'[{nan_flag_class[1e-3]:.0f}, {nan_flag[1e-3]:.0f}]',
             'nans_1e_6': f'[{nan_flag_class[1e-6]:.0f}, {nan_flag[1e-6]:.0f}]',

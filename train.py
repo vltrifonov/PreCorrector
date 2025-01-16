@@ -57,7 +57,7 @@ def train(model, data, train_config):
         
     if train_config['model_type'] == 'naivegnn':
         compute_loss = partial(compute_loss_naivegnn, loss_fn=loss_fn)
-    elif train_config['model_type'] == 'precorrector':
+    elif train_config['model_type'] == 'precorrector' or train_config['model_type'] == 'precorrector_rhs_ones':
         compute_loss = partial(compute_loss_precorrector, loss_fn=loss_fn)
     else:
         raise ValueError('Invalid model type.')
@@ -111,7 +111,7 @@ def construction_time_with_gnn(model, A_lhs_i, A_pad_i, b_i, bi_edges_i, num_rou
         t_ls.append(perf_counter() - s + pre_time_ic)
     return np.mean(t_ls), np.std(t_ls)
 
-def make_NaiveGNN(key, config):
+def make_NaiveGNN(key, model_type, config):
     subkeys = random.split(key, 5)
     layer_ = eqx.nn.Conv1d if config['layer_type'] == 'Conv1d' else ConstantConv1d
     NodeEncoder = FullyConnectedNet(features=config['node_enc']['features'],
@@ -156,6 +156,31 @@ def make_PreCorrector(key, config):
                                            N_layers=config['mp']['node_upd']['N_layers'],
                                            layer_=layer_, key=subkeys[4]),
         nodes_init_fn = nodes_init_nodes_val,
+        mp_rounds = config['mp']['mp_rounds']
+    )
+    model = PreCorrector(EdgeEncoder=EdgeEncoder, EdgeDecoder=EdgeDecoder,
+                         MessagePass=MessagePass, alpha=jnp.array([config['alpha']]))
+    return model
+
+def make_PreCorrector_rhsOnes(key, config):
+    subkeys = random.split(key, 5)
+    layer_ = eqx.nn.Conv1d if config['layer_type'] == 'Conv1d' else ConstantConv1d
+#     NodeEncoder = FullyConnectedNet(features=config['node_enc']['features'],
+#                                     N_layers=config['node_enc']['N_layers'], key=subkeys[0])
+    EdgeEncoder = FullyConnectedNet(features=config['edge_enc']['features'],
+                                    N_layers=config['edge_enc']['N_layers'],
+                                    layer_=layer_, key=subkeys[1])
+    EdgeDecoder = FullyConnectedNet(features=config['edge_dec']['features'],
+                                    N_layers=config['edge_dec']['N_layers'],
+                                    layer_=layer_, key=subkeys[2])
+    MessagePass = MessagePassing_StaticDiag(
+        update_edge_fn = FullyConnectedNet(features=config['mp']['edge_upd']['features'],
+                                           N_layers=config['mp']['edge_upd']['N_layers'],
+                                           layer_=layer_, key=subkeys[3]),
+        update_node_fn = FullyConnectedNet(features=config['mp']['node_upd']['features'],
+                                           N_layers=config['mp']['node_upd']['N_layers'],
+                                           layer_=layer_, key=subkeys[4]),
+        nodes_init_fn = nodes_init_ones,
         mp_rounds = config['mp']['mp_rounds']
     )
     model = PreCorrector(EdgeEncoder=EdgeEncoder, EdgeDecoder=EdgeDecoder,
