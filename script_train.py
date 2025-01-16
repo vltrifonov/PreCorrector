@@ -34,11 +34,10 @@ def grid_train(base_config, params_grid):
 #         config['save_model'] = True # Always save model when train over many hp sets
         config['name'] = name
         
-        out = script_train(config, meta_data_df)
-        if out[0]:
-            for k, v in out[1].items():
-                df.loc[config['name'], k] = v
-            meta_data_df.to_csv(os.path.join(meta_data_path, 'meta_data.csv'), index=True)
+        out = script_train(config, return_meta_data=True)
+        for k, v in out[1].items():
+            meta_data_df.loc[config['name'], k] = v
+        meta_data_df.to_csv(os.path.join(meta_data_path, 'meta_data.csv'), index=True)
     return
 
 def parse_config(base_config, cg_maxiter, model_type, loss_type, batch_size,
@@ -76,7 +75,6 @@ def script_train(config, return_meta_data=False):
          info: bool - if script is fully successful?
          results: dict - values to save, only if return_meta_data == True.'''
     # Initialization
-    logging.info('Config: %s.\n', config)
     key = random.PRNGKey(config['seed'])
     data_config = config['data_config']
     model_config = config['model_config']
@@ -103,6 +101,7 @@ def script_train(config, return_meta_data=False):
     logging.captureWarnings(True)
     logging.info('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
     logging.info(f'Script with model `{config["name"]}` started execution.')    
+    logging.info('Config: %s.\n', config)
     
     try:
         results_folder_exists = os.path.isdir(os.path.join(config['path'], config['folder']))
@@ -173,7 +172,7 @@ def script_train(config, return_meta_data=False):
         logging.info('CG with GNN is finished:')
         logging.info(f' iterations to atol([mean, std]): %s;', iters_stats)
         logging.info(f' time to atol([mean, std]): %s;', time_stats)
-        logging.info(f' number of linsystems for which CG did not conerge to atol: %s.\n', time_stats)
+        logging.info(f' number of linsystems for which CG did not conerge to atol: %s.\n', nan_flag)
     except Exception as e:
         logging.critical(f'Script failed on CG with GNN.\n{e}\n\n\n')
         return False
