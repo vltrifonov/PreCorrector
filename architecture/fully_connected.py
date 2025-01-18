@@ -27,6 +27,14 @@ class FullyConnectedNet(eqx.Module):
         x = self.layers[-1](x)
         return x
     
+class DummyLayer(eqx.Module):
+    'Do nothing. Returns second channel of the input'
+    def __init__(self, *args, **kwargs):
+        super(DummyLayer, self).__init__()
+        
+    def __call__(self, x, *args, **kwargs):
+        return x[1:2, ...]
+    
 class ConstantConv1d(eqx.nn.Conv1d):
     def __init__(
         self,

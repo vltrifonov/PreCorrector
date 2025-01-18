@@ -15,9 +15,10 @@ from utils import batch_indices
 from loss import high_freq_loss, low_freq_loss
 from loss import compute_loss_precorrector, compute_loss_naivegnn
 
+from config import dict_aggregate_functions
 from data.graph_utils import spmatrix_to_graph
-from architecture.fully_conected import FullyConnectedNet, ConstantConv1d
-from architecture.neural_preconditioner_design import PreCorrector, NaiveGNN
+from architecture.neural_preconditioner_design import PreCorrector, NaiveGNN, EdgeMLP, EdgeMLP_StaticDiag
+from architecture.fully_connected import FullyConnectedNet, ConstantConv1d, DummyLayer
 from architecture.message_passing import MessagePassing_StaticDiag, MessagePassing_NotStaticDiag
 from architecture.message_passing import nodes_init_nodes_val, nodes_init_ones
 
@@ -96,7 +97,7 @@ def construction_time_with_gnn(model, A_lhs_i, A_pad_i, b_i, bi_edges_i, num_rou
     nodes, edges, senders, receivers = spmatrix_to_graph(A_pad_i, b_i)
     lhs_nodes, lhs_edges, lhs_senders, lhs_receivers = spmatrix_to_graph(A_lhs_i, b_i)
     
-    if isinstance(model, PreCorrector):
+    if isinstance(model, (PreCorrector, NaiveGNN, EdgeMLP, EdgeMLP_StaticDiag)):
         assert pre_time_ic > 0
         jit_model = jit(lambda a1, a2, a3, a4, *args: model((a1, a2, a3, a4)))
     else:
@@ -111,7 +112,48 @@ def construction_time_with_gnn(model, A_lhs_i, A_pad_i, b_i, bi_edges_i, num_rou
         t_ls.append(perf_counter() - s + pre_time_ic)
     return np.mean(t_ls), np.std(t_ls)
 
-def make_NaiveGNN(key, model_type, config):
+def make_EdgeMLP(key, config, static_diag):
+    subkeys = random.split(key, 2)
+    layer_ = eqx.nn.Conv1d if config['layer_type'] == 'Conv1d' else ConstantConv1d
+    model = EdgeMLP_StaticDiag if static_diag else EdgeMLP
+
+    mlp = FullyConnectedNet(features=config['mlp']['features'],
+                            N_layers=config['mlp']['N_layers'],
+                            layer_=layer_, key=subkeys[1])
+    
+    model = model(mlp, alpha=jnp.array([config['alpha']]))
+    return model
+
+def make_LightGNN(key, config, static_diag, node_mlp, edge_mlp):
+    subkeys = random.split(key, 5)
+    layer_ = eqx.nn.Conv1d if config['layer_type'] == 'Conv1d' else ConstantConv1d
+    aggregate_edges_ = dict_aggregate_functions[config['mp']['aggregate_edges']]
+    node_update = FullyConnectedNet if node_mlp else DummyLayer
+    edge_update = FullyConnectedNet if edge_mlp else ProdLayer
+    mp_layer = MessagePassing_StaticDiag if static_diag else MessagePassing_NotStaticDiag
+    
+    EdgeEncoder = FullyConnectedNet(features=config['edge_enc']['features'],
+                                    N_layers=config['edge_enc']['N_layers'],
+                                    layer_=layer_, key=subkeys[1])
+    EdgeDecoder = FullyConnectedNet(features=config['edge_dec']['features'],
+                                    N_layers=config['edge_dec']['N_layers'],
+                                    layer_=layer_, key=subkeys[2])
+    MessagePass = mp_layer(
+        update_edge_fn = edge_update(features=config['mp']['edge_upd']['features'],
+                                     N_layers=config['mp']['edge_upd']['N_layers'],
+                                     layer_=layer_, key=subkeys[3]),
+        update_node_fn = node_update(features=config['mp']['node_upd']['features'],
+                                     N_layers=config['mp']['node_upd']['N_layers'],
+                                     layer_=layer_, key=subkeys[4]),
+        nodes_init_fn = nodes_init_ones,
+        mp_rounds = config['mp']['mp_rounds'],
+        aggregate_edges = aggregate_edges_
+    )
+    model = PreCorrector(EdgeEncoder=EdgeEncoder, EdgeDecoder=EdgeDecoder,
+                         MessagePass=MessagePass, alpha=jnp.array([config['alpha']]))
+    return model
+
+def make_NaiveGNN(key, config):
     subkeys = random.split(key, 5)
     layer_ = eqx.nn.Conv1d if config['layer_type'] == 'Conv1d' else ConstantConv1d
     NodeEncoder = FullyConnectedNet(features=config['node_enc']['features'],
@@ -131,7 +173,8 @@ def make_NaiveGNN(key, model_type, config):
                                            N_layers=config['mp']['node_upd']['N_layers'],
                                            layer_=layer_, key=subkeys[4]),
         nodes_init_fn = nodes_init_nodes_val,
-        mp_rounds = config['mp']['mp_rounds']
+        mp_rounds = config['mp']['mp_rounds'],
+        aggregate_edges = dict_aggregate_functions['sum']
     )
     model = NaiveGNN(NodeEncoder=NodeEncoder, EdgeEncoder=EdgeEncoder,
                      EdgeDecoder=EdgeDecoder, MessagePass=MessagePass)
@@ -140,6 +183,8 @@ def make_NaiveGNN(key, model_type, config):
 def make_PreCorrector(key, config):
     subkeys = random.split(key, 5)
     layer_ = eqx.nn.Conv1d if config['layer_type'] == 'Conv1d' else ConstantConv1d
+    aggregate_edges_ = dict_aggregate_functions[config['mp']['aggregate_edges']]
+    
 #     NodeEncoder = FullyConnectedNet(features=config['node_enc']['features'],
 #                                     N_layers=config['node_enc']['N_layers'], key=subkeys[0])
     EdgeEncoder = FullyConnectedNet(features=config['edge_enc']['features'],
@@ -156,15 +201,19 @@ def make_PreCorrector(key, config):
                                            N_layers=config['mp']['node_upd']['N_layers'],
                                            layer_=layer_, key=subkeys[4]),
         nodes_init_fn = nodes_init_nodes_val,
-        mp_rounds = config['mp']['mp_rounds']
+        mp_rounds = config['mp']['mp_rounds'],
+        aggregate_edges = aggregate_edges_
     )
     model = PreCorrector(EdgeEncoder=EdgeEncoder, EdgeDecoder=EdgeDecoder,
                          MessagePass=MessagePass, alpha=jnp.array([config['alpha']]))
     return model
 
-def make_PreCorrector_rhsOnes(key, config):
+def make_PreCorrector_rhsOnes(key, config, static_diag):
     subkeys = random.split(key, 5)
     layer_ = eqx.nn.Conv1d if config['layer_type'] == 'Conv1d' else ConstantConv1d
+    aggregate_edges_ = dict_aggregate_functions[config['mp']['aggregate_edges']]
+    mp_layer = MessagePassing_StaticDiag if static_diag else MessagePassing_NotStaticDiag
+    
 #     NodeEncoder = FullyConnectedNet(features=config['node_enc']['features'],
 #                                     N_layers=config['node_enc']['N_layers'], key=subkeys[0])
     EdgeEncoder = FullyConnectedNet(features=config['edge_enc']['features'],
@@ -181,7 +230,8 @@ def make_PreCorrector_rhsOnes(key, config):
                                            N_layers=config['mp']['node_upd']['N_layers'],
                                            layer_=layer_, key=subkeys[4]),
         nodes_init_fn = nodes_init_ones,
-        mp_rounds = config['mp']['mp_rounds']
+        mp_rounds = config['mp']['mp_rounds'],
+        aggregate_edges = aggregate_edges_
     )
     model = PreCorrector(EdgeEncoder=EdgeEncoder, EdgeDecoder=EdgeDecoder,
                          MessagePass=MessagePass, alpha=jnp.array([config['alpha']]))

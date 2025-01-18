@@ -239,15 +239,15 @@ def script_train(config, return_meta_data=False):
             'iters_1e_9': f'[{iters_stats[1e-9][0]:.1f}, {iters_stats[1e-9][1]:.2f}], [{iters_stats_class[1e-9][0]:.1f}, {iters_stats_class[1e-9][1]:.2f}]',
             'iters_1e_12': f'[{iters_stats[1e-12][0]:.1f}, {iters_stats[1e-12][1]:.2f}], [{iters_stats_class[1e-12][0]:.1f}, {iters_stats_class[1e-12][1]:.2f}]',
             # ([mean, std] with GNN, [mean, std] with classical prec)
-            'time_1e_3': f'[{time_stats[1e-3][0]:.4f}, {time_stats_class[1e-3][1]:.4f}], [{time_stats[1e-3][0]:.4f}, {time_stats_class[1e-3][1]:.4f}]',
-            'time_1e_6': f'[{time_stats[1e-6][0]:.4f}, {time_stats_class[1e-6][1]:.4f}], [{time_stats[1e-6][0]:.4f}, {time_stats_class[1e-6][1]:.4f}]',
-            'time_1e_9': f'[{time_stats[1e-9][0]:.4f}, {time_stats_class[1e-9][1]:.4f}], [{time_stats[1e-9][0]:.4f}, {time_stats_class[1e-9][1]:.4f}]',
-            'time_1e_12': f'[{time_stats[1e-12][0]:.4f}, {time_stats_class[1e-12][1]:.4f}], [{time_stats[1e-12][0]:.4f}, {time_stats_class[1e-12][1]:.4f}]',
+            'time_1e_3': f'[{time_stats[1e-3][0]:.4f}, {time_stats[1e-3][1]:.4f}], [{time_stats_class[1e-3][0]:.4f}, {time_stats_class[1e-3][1]:.4f}]',
+            'time_1e_6': f'[{time_stats[1e-6][0]:.4f}, {time_stats[1e-6][1]:.4f}], [{time_stats_class[1e-6][0]:.4f}, {time_stats_class[1e-6][1]:.4f}]',
+            'time_1e_9': f'[{time_stats[1e-9][0]:.4f}, {time_stats[1e-9][1]:.4f}], [{time_stats_class[1e-9][0]:.4f}, {time_stats_class[1e-9][1]:.4f}]',
+            'time_1e_12': f'[{time_stats[1e-12][0]:.4f}, {time_stats[1e-12][1]:.4f}], [{time_stats_class[1e-12][0]:.4f}, {time_stats_class[1e-12][1]:.4f}]',
             # [with GNN, with classical prec]
-            'nans_1e_3': f'[{nan_flag_class[1e-3]:.0f}, {nan_flag[1e-3]:.0f}]',
-            'nans_1e_6': f'[{nan_flag_class[1e-6]:.0f}, {nan_flag[1e-6]:.0f}]',
-            'nans_1e_9': f'[{nan_flag_class[1e-9]:.0f}, {nan_flag[1e-9]:.0f}]',
-            'nans_1e_12': f'[{nan_flag_class[1e-12]:.0f}, {nan_flag[1e-12]:.0f}]',
+            'nans_1e_3': f'[{nan_flag[1e-3]:.0f}, {nan_flag_class[1e-3]:.0f}]',
+            'nans_1e_6': f'[{nan_flag[1e-6]:.0f}, {nan_flag_class[1e-6]:.0f}]',
+            'nans_1e_9': f'[{nan_flag[1e-9]:.0f}, {nan_flag_class[1e-9]:.0f}]',
+            'nans_1e_12': f'[{nan_flag[1e-12]:.0f}, {nan_flag_class[1e-12]:.0f}]',
             # [mean, std]
             't_class_prec': f'[{class_time_mean_test:.3e}, {class_time_std_test:.3e}]',
             't_gnn_prec': f'[{time_gnn_mean:.3e}, {time_gnn_std:.3e}]'

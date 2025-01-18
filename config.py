@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+from jax.ops import segment_sum, segment_min, segment_max
 
 blank_config = {
     'path': '', # Path to the project
@@ -60,9 +61,20 @@ default_naivegnn_config = {
             'features': [32, 16, 16],
             'N_layers': 2,
         },
-        'mp_rounds': 5
+        'mp_rounds': 5,
+        'aggregate_edges': 'sum'
     }
 }
+
+default_edgemlp_config = {
+    'layer_type': 'Conv1d',
+    'alpha': 0.,
+    'mlp': {
+        'features': [1, 16, 1],
+        'N_layers': 2,
+    }
+}
+
 
 default_precorrector_config = {
     'layer_type': 'Conv1d',
@@ -88,6 +100,14 @@ default_precorrector_config = {
             'features': [17, 1, 1],
             'N_layers': 2,
         },
-        'mp_rounds': 5
+        'mp_rounds': 5,
+        'aggregate_edges': 'sum'
     }
+}
+
+dict_aggregate_functions = {
+    'sum': segment_sum,
+    'max': segment_min,
+    'min': segment_max,
+    'mean': 'TODO'
 }
