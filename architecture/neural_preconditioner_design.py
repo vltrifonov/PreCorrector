@@ -34,11 +34,12 @@ class EdgeMLP_StaticDiag(eqx.Module):
     
     def __call__(self, train_graph):
         nodes, edges_init, senders, receivers = train_graph
-        norm = jnp.abs(edges_init[non_diag_edge_idx]).max()
 
 #         # Find non-main-diagonal edges
         non_diag_edge_idx = jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]]))
         non_diag_edge_idx = jnp.nonzero(non_diag_edge_idx, size=senders.shape[-1]-nodes.shape[-1], fill_value=jnp.nan)[0].astype(jnp.int32)
+        
+        norm = jnp.abs(edges_init[non_diag_edge_idx]).max()
         
         edges = self.mlp((edges_init[non_diag_edge_idx] / norm).reshape([1, -1]))[0, ...]
         

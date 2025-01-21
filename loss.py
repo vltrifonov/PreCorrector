@@ -17,8 +17,7 @@ def high_freq_loss(L, A, x, b):
     return jnp.square(jnp.linalg.norm(L @ (L.T @ b) - A @ b, ord=2))
 
 def compute_loss_precorrector(model, X, loss_fn, reduction=jnp.mean):
-    '''Placeholder for supervised learning `y`.
-       Positions in `X`:
+    '''Positions in `X`:
          X[0] - lhs A.
          X[1] - padded lhs A.
          X[2] - rhs b.
@@ -31,8 +30,7 @@ def compute_loss_precorrector(model, X, loss_fn, reduction=jnp.mean):
     return reduction(loss)
 
 def compute_loss_naivegnn(model, X, loss_fn, reduction=jnp.mean):
-    '''Placeholder for supervised learning `y`.
-       Positions in `X`:
+    '''Positions in `X`:
          X[0] - lhs A.
          X[1] - padded lhs A.
          X[2] - rhs b.

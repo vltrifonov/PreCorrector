@@ -65,7 +65,8 @@ def train(model, data, train_config):
         
     compute_loss_and_grads = eqx.filter_value_and_grad(compute_loss)
     
-    def make_val_step(model, ind):
+    def make_val_step(carry, ind):
+        model = carry
         batched_X_test = [arr[ind, ...] for arr in X_test]
         loss = compute_loss(model, batched_X_test)
         return model, loss
@@ -85,12 +86,22 @@ def train(model, data, train_config):
         b_train = batch_indices(keys[0], X_train[0], batch_size)
         b_test = batch_indices(keys[1], X_test[0], batch_size)
         
-        carry_inner_init = (model, opt_state)
-        (model, opt_state), loss_train = lax.scan(make_step, carry_inner_init, b_train)
+        (model, opt_state), loss_train = lax.scan(make_step, (model, opt_state), b_train)
         model, loss_test = lax.scan(make_val_step, model, b_test)
-        return (model, opt_state), [jnp.mean(loss_train), jnp.mean(loss_test)] 
+        return (model, opt_state), [jnp.mean(loss_train), jnp.mean(loss_test)]
     
     (model, _), losses = lax.scan(train_body, (model, opt_state), jnp.arange(train_config['epoch_num']))
+    
+#     losses = [[], []]
+#     for x in jnp.arange(train_config['epoch_num']):
+#         keys = random.split(random.PRNGKey(x), 2)
+#         b_train = batch_indices(keys[0], X_train[0], batch_size)
+#         b_test = batch_indices(keys[1], X_test[0], batch_size)
+        
+#         (model, opt_state), loss_train = lax.scan(make_step, (model, opt_state, X_train), b_train)
+#         model, loss_test = lax.scan(make_val_step, (model, X_test), b_test)
+#         losses[0].append(jnp.mean(loss_train))
+#         losses[1].append(jnp.mean(loss_test))
     return model, losses
 
 def construction_time_with_gnn(model, A_lhs_i, A_pad_i, b_i, bi_edges_i, num_rounds, pre_time_ic=None):
