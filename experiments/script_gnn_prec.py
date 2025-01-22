@@ -128,7 +128,7 @@ def script_gnn_prec(config, return_meta_data):
             'seed': f'{config["seed"]:.0f}',
 #             Train/model
             'model_type': train_config["model_type"],
-            'use_nodes': True if train_config['model_type'] != 'precorrector_gnn' else model_config["static_diag"],
+            'use_nodes': True if train_config['model_type'] != 'precorrector_gnn' else model_config["use_nodes"],
             'node_upd_mlp': True if train_config['model_type'] != 'precorrector_gnn' else model_config["node_upd_mlp"],
             'static_diag': True if train_config['model_type'] == 'naive_gnn' else model_config["static_diag"],
             'aggregate_edges': '-' if train_config['model_type'] == 'precorrector_mlp' else model_config['mp']['aggregate_edges'],

@@ -30,7 +30,7 @@ blank_data_config = {
     'pde': '',   # {'div_k_grad', 'possion'}
     'grid': '', # {32, 64, 128, 256}
     'variance': '', # {0.1, 0.5, 0.7, 1.1}
-    'lhs_type': '', # {'fd', 'l_ic0', 'ict'}
+    'lhs_type': '', # {'fd', 'l_ic0', 'l_ict'}
     'N_samples_train': '', # int <= 1000
     'N_samples_test': '', # int <= 200
     'fill_factor': '', # int >= 0

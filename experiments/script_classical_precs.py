@@ -40,7 +40,7 @@ def script_classical_prec(config, return_meta_data):
         results_folder_exists = os.path.isdir(os.path.join(config['path'], config['folder']))
         data_dir_exists = os.path.isdir(data_config['data_dir'])
         assert os.path.isdir(config['path']) and results_folder_exists and data_dir_exists, 'Check directories'
-        assert data_config['lhs_type'] in {'l_ic0', 'ict'}, 'Invalid `lhs_type`.'
+        assert data_config['lhs_type'] in {'l_ic0', 'l_ict'}, 'Invalid `lhs_type`.'
     except Exception as e:
         logging.critical(e)
         return False
