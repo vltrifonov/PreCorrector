@@ -1,13 +1,10 @@
 import os
 import string
-from typing import Iterable
+from copy import deepcopy
 import random as simple_random
-from IPython.display import display
 
-import ilupp
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from scipy.sparse import coo_matrix
 
 import equinox as eqx
@@ -16,6 +13,54 @@ from jax import random, tree_util
 from jax.experimental import sparse as jsparse
 
 pd.set_option('display.max_columns', 500)
+
+def grid_script(script, base_config, params_grid):
+    meta_data_path = os.path.join(base_config['path'], base_config['folder'])
+    assert os.path.isdir(meta_data_path)
+    try: meta_data_df = pd.read_csv(os.path.join(meta_data_path, 'meta_data.csv'), index_col=0)
+    except: meta_data_df = pd.DataFrame({})
+
+    for i, param_set in enumerate(params_grid):
+        print('Started:', i)
+        flag = True
+        while flag:
+            name = id_generator()
+            flag = name in meta_data_df.index
+        
+        config = parse_config(base_config, **param_set)
+        config['name'] = name
+        
+        out = script(config, return_meta_data=True)
+        for k, v in out[1].items():
+            meta_data_df.loc[config['name'], k] = v
+        meta_data_df.to_csv(os.path.join(meta_data_path, 'meta_data.csv'), index=True)
+    return
+
+def parse_config(base_config, model_use, cg_maxiter, cg_atol, 
+                 pde, grid, variance, lhs_type, fill_factor, threshold,
+                 model_type, loss_type, batch_size, lr, epoch_num):
+    new_config = deepcopy(base_config)
+    new_config.update({
+        'model_use': model_use,
+        'cg_maxiter': cg_maxiter,
+        'cg_atol': cg_atol
+    })
+    new_config['data_config'].update({
+        'pde': pde,
+        'grid': grid,
+        'variance': variance,
+        'lhs_type': lhs_type,
+        'fill_factor': fill_factor,
+        'threshold': threshold
+    })
+    new_config['train_config'].update({
+        'model_type': model_type,
+        'loss_type': loss_type,
+        'batch_size': batch_size,
+        'lr': lr,
+        'epoch_num': epoch_num
+    })
+    return new_config
 
 def batch_indices(key, arr, batch_size):
     dataset_size = len(arr)
@@ -34,47 +79,3 @@ def jBCOO_to_scipyCSR(A):
 
 def id_generator(size=6, chars=string.ascii_lowercase + string.digits):
     return ''.join(simple_random.choice(chars) for _ in range(size))
-
-def parse_run(dir_name, run_name, figsize=(14, 14)):
-    assert isinstance(run_name, Iterable)
-    df = pd.read_csv(os.path.join(dir_name, 'meta_data.csv'), index_col=0)
-    _, axes = plt.subplots(len(run_name), 2, figsize=figsize)
-    if len(run_name) == 1:
-        axes = np.expand_dims(axes, 0)
-    
-    for i, n in enumerate(run_name):
-        file = os.path.join(dir_name, n+'.npz')
-        run = jnp.load(file)
-        axes[i, 0].plot(range(len(run['losses'][0])), run['losses'][1], label='Test')
-        axes[i, 0].plot(range(len(run['losses'][0])), run['losses'][0], label='Train')
-        axes[i, 0].legend()
-        axes[i, 0].set_yscale('log')
-        axes[i, 0].set_xlabel('Epoch')
-        axes[i, 0].set_ylabel('Loss')
-        axes[i, 0].grid()
-        axes[i, 0].set_title(n)
-        
-        try:
-            axes[i, 1].plot(range(len(run['res_base'])), run['res_base'], label="CG with baseline")
-            axes[i, 1].plot(range(len(run['res_model'])), run['res_model'], label="CG with model")
-            axes[i, 1].legend()
-            axes[i, 1].set_yscale('log')
-            axes[i, 1].set_xlabel('Iteration')
-            axes[i, 1].set_ylabel('$\|res\|$')
-            axes[i, 1].grid()
-        except:
-            pass
-        
-    display(df.loc[run_name, :])
-    plt.tight_layout()
-    plt.show()
-    return
-
-def read_meta_data(dir_name):
-    path = '/mnt/local/data/vtrifonov/prec-learning-Notay-loss/results_cases'
-    df = pd.read_csv(os.path.join(path, dir_name, 'meta_data.csv'), index_col=0)
-    return df
-
-def df_threshold_residuals(df):
-    display(df.loc[:, ['res_base_1e_3', 'res_base_1e_6', 'res_base_1e_9', 'res_model_1e_3', 'res_model_1e_6', 'res_model_1e_9']])
-    return

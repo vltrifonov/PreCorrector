@@ -1,5 +1,5 @@
-import jax.numpy as jnp
 from jax import vmap
+import jax.numpy as jnp
 from jax.experimental import sparse as jsparse
 
 from data.graph_utils import spmatrix_to_graph

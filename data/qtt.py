@@ -54,7 +54,7 @@ def fd_mtx2(a):
     mat = mat * (n + 1) ** 2                     # Multiply by scaling factor (n+1)^2
     return mat.tocsc()
 
-def div_k_grad(n_samples, grid, bounds, cov_model, var, tril_func=lambda *args: None, rhs_func=lambda grid: np.random.randn(grid*grid)):
+def div_k_grad(n_samples, grid, bounds, cov_model, var, rhs_func=lambda grid: np.random.randn(grid*grid)):
     A_ls, b_ls, x_ls, k_ls = [], [], [], []
     while len(k_ls) != n_samples:
         field = parafields.generate_field(cells=[grid+1, grid+1], covariance=cov_model, variance=var)
@@ -79,7 +79,7 @@ def div_k_grad(n_samples, grid, bounds, cov_model, var, tril_func=lambda *args: 
     k_stats = {'min': k_ls.min(), 'max': k_ls.max(), 'mean': k_ls.mean()}
     return A_ls, b_ls, x_ls, k_stats
 
-def poisson(n_samples, grid, tril_func=lambda *args: None, rhs_func=lambda grid: np.random.randn(grid*grid)):
+def poisson(n_samples, grid, rhs_func=lambda grid: np.random.randn(grid*grid)):
     A_ls, b_ls, x_ls = [], [], []
     for _ in range(n_samples):
         A = fd_mtx2(np.ones([grid+1, grid+1]))

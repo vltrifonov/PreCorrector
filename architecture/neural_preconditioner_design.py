@@ -4,50 +4,7 @@ import equinox as eqx
 
 from data.graph_utils import bi_direc_edge_avg, graph_to_spmatrix, symm_graph_tril
 
-class EdgeMLP(eqx.Module):
-    mlp: eqx.Module
-    alpha: jax.Array
-    
-    def __init__(self, mlp, alpha):
-        super(EdgeMLP, self).__init__()
-        self.mlp = mlp
-        self.alpha = alpha
-        return
-    
-    def __call__(self, train_graph):
-        nodes, edges_init, senders, receivers = train_graph
-        norm = jnp.abs(edges_init).max()
-        edges = self.mlp((edges_init / norm).reshape([1, -1]))[0, ...]
-        edges = edges_init + self.alpha * (edges * norm)
-        low_tri = graph_to_spmatrix(nodes, edges, senders, receivers)
-        return low_tri
-    
-class EdgeMLP_StaticDiag(eqx.Module):
-    mlp: eqx.Module
-    alpha: jax.Array
-    
-    def __init__(self, mlp, alpha):
-        super(EdgeMLP_StaticDiag, self).__init__()
-        self.mlp = mlp
-        self.alpha = alpha
-        return
-    
-    def __call__(self, train_graph):
-        nodes, edges_init, senders, receivers = train_graph
-
-#         # Find non-main-diagonal edges
-        non_diag_edge_idx = jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]]))
-        non_diag_edge_idx = jnp.nonzero(non_diag_edge_idx, size=senders.shape[-1]-nodes.shape[-1], fill_value=jnp.nan)[0].astype(jnp.int32)
-        
-        norm = jnp.abs(edges_init[non_diag_edge_idx]).max()
-        
-        edges = self.mlp((edges_init[non_diag_edge_idx] / norm).reshape([1, -1]))[0, ...]
-        
-        edges = edges_init.at[non_diag_edge_idx].add(self.alpha * (edges * norm))
-        low_tri = graph_to_spmatrix(nodes, edges, senders, receivers)
-        return low_tri
-
-class PreCorrector(eqx.Module):
+class PreCorrectorGNN(eqx.Module):
     '''L = L + alpha * GNN(L)'''
     EdgeEncoder: eqx.Module
     MessagePass: eqx.Module
@@ -55,7 +12,7 @@ class PreCorrector(eqx.Module):
     alpha: jax.Array
 
     def __init__(self, EdgeEncoder, MessagePass, EdgeDecoder, alpha):
-        super(PreCorrector, self).__init__()
+        super(PreCorrectorGNN, self).__init__()
         self.EdgeEncoder = EdgeEncoder
         self.MessagePass = MessagePass
         self.EdgeDecoder = EdgeDecoder
@@ -75,8 +32,52 @@ class PreCorrector(eqx.Module):
         low_tri = graph_to_spmatrix(nodes, edges, senders, receivers)
         return low_tri
 
+class PreCorrectorMLP(eqx.Module):
+    '''L = L + alpha * MLP(L)'''
+    mlp: eqx.Module
+    alpha: jax.Array
+    
+    def __init__(self, mlp, alpha):
+        super(PreCorrectorMLP, self).__init__()
+        self.mlp = mlp
+        self.alpha = alpha
+        return
+    
+    def __call__(self, train_graph):
+        nodes, edges_init, senders, receivers = train_graph
+        norm = jnp.abs(edges_init).max()
+        edges = self.mlp((edges_init / norm).reshape([1, -1]))[0, ...]
+        edges = edges_init + self.alpha * (edges * norm)
+        low_tri = graph_to_spmatrix(nodes, edges, senders, receivers)
+        return low_tri
+    
+class PreCorrectorMLP_StaticDiag(eqx.Module):
+    '''L = L + alpha * MLP(L)'''
+    mlp: eqx.Module
+    alpha: jax.Array
+    
+    def __init__(self, mlp, alpha):
+        super(PreCorrectorMLP_StaticDiag, self).__init__()
+        self.mlp = mlp
+        self.alpha = alpha
+        return
+    
+    def __call__(self, train_graph):
+        nodes, edges_init, senders, receivers = train_graph
+
+        # Find non-main-diagonal edges
+        non_diag_edge_idx = jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]]))
+        non_diag_edge_idx = jnp.nonzero(non_diag_edge_idx, size=senders.shape[-1]-nodes.shape[-1], fill_value=jnp.nan)[0].astype(jnp.int32)
+        
+        norm = jnp.abs(edges_init[non_diag_edge_idx]).max()
+        edges = self.mlp((edges_init[non_diag_edge_idx] / norm).reshape([1, -1]))[0, ...]
+        
+        edges = edges_init.at[non_diag_edge_idx].add(self.alpha * (edges * norm))
+        low_tri = graph_to_spmatrix(nodes, edges, senders, receivers)
+        return low_tri
+    
 class NaiveGNN(eqx.Module):
-    '''GNN operates on A.
+    '''GNN operates on A and return L.
     Perseving diagonal as: diag(A) = diag(D) from A = LDL^T'''
     NodeEncoder: eqx.Module
     EdgeEncoder: eqx.Module
@@ -89,7 +90,7 @@ class NaiveGNN(eqx.Module):
         self.EdgeEncoder = EdgeEncoder
         self.MessagePass = MessagePass
         self.EdgeDecoder = EdgeDecoder
-        return    
+        return
     
     def __call__(self, train_graph, bi_edges_indx, lhs_graph):
         lhs_nodes, lhs_edges, lhs_senders, lhs_receivers = lhs_graph

@@ -7,12 +7,9 @@ from jax import vmap
 from data.qtt import pad_lhs_FD, pad_lhs_LfromIС0, pad_lhs_LfromICt
 from utils import make_BCOO
 
-def load_dataset(config, return_train, pde_type='elliptic'):
-    '''Config consists of:
-    {data_dir, pde, grid, variance, lhs_type, N_samples, precision, fill_factor, threshold}'''
-    
+def load_dataset(config, return_train):
     N_samples = config['N_samples_train'] if return_train else config['N_samples_test']
-    if pde_type == 'elliptic':
+    if config['pde'] in {'poisson', 'div_k_grad'}:
         A, A_pad, b, x, bi_edges, pre_time_mean, pre_time_std = elliptic_dataset_from_hard(return_train, N_samples, **config)
     else:
         raise NotImplementedError
@@ -20,11 +17,9 @@ def load_dataset(config, return_train, pde_type='elliptic'):
     
 
 def elliptic_dataset_from_hard(return_train, N_samples, data_dir, pde, grid, variance,
-                               lhs_type, precision, fill_factor, threshold, **kwargs):
-    assert precision in {'f32', 'f64'}
-    assert grid in {32, 64, 128}
-    assert pde in {'poisson', 'div_k_grad'}
-    data_dir = os.path.join(data_dir, 'paper_datasets' if precision == 'f32' else 'paper_datasets_f64')
+                               lhs_type, fill_factor, threshold, **kwargs):
+    assert grid in {32, 64, 128, 256}
+    data_dir = os.path.join(data_dir, 'paper_datasets')
     cov_model = 'Gauss'
     
     name = pde + str(grid)    

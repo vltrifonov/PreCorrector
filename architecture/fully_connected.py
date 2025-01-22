@@ -7,12 +7,12 @@ from jax import random
 import jax.nn as jnn
 import equinox as eqx
 
-class FullyConnectedNet(eqx.Module):
+class FullyConnected(eqx.Module):
     layers: list
     act: Callable = eqx.field(static=True)
         
     def __init__(self, features, N_layers, key, act=jnn.relu, layer_=eqx.nn.Conv1d):
-        super(FullyConnectedNet, self).__init__()
+        super(FullyConnected, self).__init__()
         N_in, N_pr, N_out = features
         keys = random.split(key, N_layers)
         Ns = [N_in,] + [N_pr,] * (N_layers - 1) + [N_out,]
@@ -31,6 +31,7 @@ class DummyLayer(eqx.Module):
     'Do nothing. Returns second channel of the input'
     def __init__(self, *args, **kwargs):
         super(DummyLayer, self).__init__()
+        return
         
     def __call__(self, x, *args, **kwargs):
         return x[1:2, ...]

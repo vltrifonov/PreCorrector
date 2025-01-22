@@ -1,10 +1,9 @@
 from typing import Callable
 
 from jax import vmap
+import equinox as eqx
 import jax.numpy as jnp
 import jax.tree_util as tree
-from jax.ops import segment_sum
-import equinox as eqx
 
 nodes_init_nodes_val = lambda nodes: nodes.reshape([1, -1])
 nodes_init_ones = lambda nodes: jnp.ones_like(nodes).reshape([1, -1])
@@ -17,7 +16,7 @@ class MessagePassing_StaticDiag(eqx.Module):
     nodes_init_fn: Callable = eqx.field(static=True)
         
     def __init__(self, update_edge_fn, update_node_fn, mp_rounds,
-                 nodes_init_fn, aggregate_edges=segment_sum):
+                 nodes_init_fn, aggregate_edges):
         super(MessagePassing_StaticDiag, self).__init__()
         self.update_edge_fn = update_edge_fn
         self.update_node_fn = update_node_fn
@@ -40,20 +39,16 @@ class MessagePassing_StaticDiag(eqx.Module):
         sent_attributes = vmap(
             tree.tree_map,
             in_axes=(None, 0), out_axes=(0)
-        )(lambda e: self.aggregate_edges(e, senders, sum_n_node), edges_by_receivers)# edges)
-#         received_attributes = vmap(
-#             tree.tree_map, 
-#             in_axes=(None, 0), out_axes=(0)
-#         )(lambda e: self.aggregate_edges(e, receivers, sum_n_node), edges)
+        )(lambda e: self.aggregate_edges(e, senders, sum_n_node), edges_by_receivers)
         
-        nodes = self.update_node_fn(jnp.concatenate([nodes, sent_attributes], axis=0)) #jnp.concatenate([nodes, sent_attributes, received_attributes], axis=0))
+        nodes = self.update_node_fn(jnp.concatenate([nodes, sent_attributes], axis=0))
         return nodes
     
     def _update_edges(self, nodes, edges, senders, receivers):
         sent_attributes = tree.tree_map(lambda n: n[:, senders], nodes)
         received_attributes = tree.tree_map(lambda n: n[:, receivers], nodes)
 
-#         # Find non-main-diagonal edges
+        # Find non-main-diagonal edges
         non_diag_edge_idx = jnp.diff(jnp.hstack([senders[:, None], receivers[:, None]]))
         non_diag_edge_idx = jnp.nonzero(non_diag_edge_idx, size=senders.shape[0]-nodes.shape[1], fill_value=jnp.nan)[0].astype(jnp.int32)
         
@@ -69,9 +64,9 @@ class MessagePassing_StaticDiag(eqx.Module):
 
 class MessagePassing_NotStaticDiag(MessagePassing_StaticDiag):
     def __init__(self, update_edge_fn, update_node_fn, mp_rounds,
-                 nodes_init_fn, aggregate_edges=segment_sum):
+                 nodes_init_fn, aggregate_edges):
         super().__init__(update_edge_fn, update_node_fn, mp_rounds,
-                         nodes_init_fn, aggregate_edges=segment_sum)
+                         nodes_init_fn, aggregate_edges)
     
     def _update_edges(self, nodes, edges, senders, receivers):
         sent_attributes = tree.tree_map(lambda n: n[:, senders], nodes)

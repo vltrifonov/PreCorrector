@@ -1,11 +1,11 @@
-from scipy.sparse.linalg import LinearOperator, cg, spsolve_triangular
-from scipy.sparse import tril
-from jax import random
-import numpy as np
-
+import inspect
 from time import perf_counter
 from functools import partial
-import inspect
+
+import numpy as np
+from jax import random
+from scipy.sparse.linalg import LinearOperator, cg, spsolve_triangular
+
 from utils import jBCOO_to_scipyCSR
 
 def batched_cg_scipy(A, b, pre_time, x0, key=None, P=None, atol=1e-12, maxiter=1000, thresholds=[1e-3, 1e-6, 1e-9, 1e-12]):
@@ -74,13 +74,3 @@ def solve_precChol(x, L, *args):
     Linv_x = spsolve_triangular(L, x, lower=True)
     res = spsolve_triangular(L.T, Linv_x, lower=False)
     return res
-
-def solve_precLU(x, L, U, *args):
-    # r = (LU)^{-1} x
-    Linv_x = spsolve_triangular(L, x, lower=True)
-    res = spsolve_triangular(U, Linv_x, lower=False)
-    return res
-
-def solve_invLU(x, L, U, *args):
-    # r = LL' x
-    return L @ (L.T @ x)
