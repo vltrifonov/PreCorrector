@@ -15,7 +15,7 @@ from jax.experimental import sparse as jsparse
 pd.set_option('display.max_columns', 500)
 
 def grid_script(script, base_config, params_grid):
-    meta_data_path = os.path.join(base_config['path'], base_config['folder'])
+    meta_data_path = os.path.join(base_config['path'], base_config['folder_log'])
     assert os.path.isdir(meta_data_path)
     try: meta_data_df = pd.read_csv(os.path.join(meta_data_path, 'meta_data.csv'), index_col=0)
     except: meta_data_df = pd.DataFrame({})

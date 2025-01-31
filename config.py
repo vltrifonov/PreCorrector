@@ -3,7 +3,8 @@ from jax.ops import segment_sum, segment_min, segment_max
 
 blank_config = {
     'path': '', # Path to the project
-    'folder': '', # Folder to save/load trained model
+    'folder_model': '', # Folder to save/load trained model
+    'folder_log': '', # Folder to write log to
     'name': '', # Run (model) name
     'model_use': '', # {'train', 'inference', 'fine-tune'}
     'save_model': '', # If True, model is saved to `model_path`. If .eqx model file already exists, it will be overwritten    
@@ -16,7 +17,7 @@ blank_config = {
 }
 
 blank_train_config = {
-    'model_type': '', # {'precorrector_mlp', 'precorrector_gnn', 'naive_gnn'}
+    'model_type': '', # {'precorrector_mlp', 'precorrector_gnn', 'precorrector_gnn_multiblock', 'naive_gnn'}
     'loss_type': '', # {'high_freq_loss', 'low_freq_loss'}
     'batch_size': '', # int > 0 
     'optimizer': '', # Optax optimizer instance
@@ -71,7 +72,7 @@ default_precorrector_gnn_config = {
             'N_layers': 2,
         },
         'mp_rounds': 5,
-        'aggregate_edges': 'min'
+        'aggregate_edges': 'max'
     }
 }
 

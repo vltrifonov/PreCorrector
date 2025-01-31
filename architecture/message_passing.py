@@ -5,7 +5,7 @@ import equinox as eqx
 import jax.numpy as jnp
 import jax.tree_util as tree
 
-nodes_init_nodes_val = lambda nodes: nodes.reshape([1, -1])
+nodes_init_nodes_val = lambda nodes: nodes
 nodes_init_ones = lambda nodes: jnp.ones_like(nodes).reshape([1, -1])
 
 class MessagePassing_StaticDiag(eqx.Module):

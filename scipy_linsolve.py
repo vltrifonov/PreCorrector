@@ -3,10 +3,23 @@ from time import perf_counter
 from functools import partial
 
 import numpy as np
-from jax import random
 from scipy.sparse.linalg import LinearOperator, cg, spsolve_triangular
 
+from jax import random
+import jax.numpy as jnp
+import jax.experimental.sparse as jsparse
+
 from utils import jBCOO_to_scipyCSR
+
+def single_lhs_cg(func, single_lhs=False):
+    def wrapper(*args, **kwargs):
+        if single_lhs:
+            sparse_repeat = jsparse.sparsify(lambda A_, num_: jnp.repeat(A_, num_, axis=0))
+            kwargs['A'] = sparse_repeat(kwargs['A'], num_=kwargs['b'].shape[0])
+            kwargs['P'] = kwargs['P'] * kwargs['b'].shape[0]
+        iters_stats, time_stats, nan_flag = func(*args, **kwargs)
+        return iters_stats, time_stats, nan_flag
+    return wrapper
 
 def batched_cg_scipy(A, b, pre_time, x0, key=None, P=None, atol=1e-12, maxiter=1000, thresholds=[1e-3, 1e-6, 1e-9, 1e-12]):
     # results_array \in R^{linsystem_num x threshold_num x 2}, where 2 is for residulas and time to tol
@@ -14,10 +27,10 @@ def batched_cg_scipy(A, b, pre_time, x0, key=None, P=None, atol=1e-12, maxiter=1
     if x0 == 'random':
         x0 = np.asarray(random.normal(key, b.shape[-1:]))
         
-    iter_time_per_res = np.full([A.shape[0], len(thresholds), 2], -42.)
-    P = P if P else [None]*A.shape[0]
+    iter_time_per_res = np.full([b.shape[0], len(thresholds), 2], -42.)
+    P = P if P else [None]*b.shape[0]
     
-    for i in range(A.shape[0]):
+    for i in range(b.shape[0]):
         A_i, b_i, P_i, = A[i, ...], b[i, ...], P[i]
         _, res_i, time_i = cg_scipy(jBCOO_to_scipyCSR(A_i), b_i, P_i, atol=atol, maxiter=maxiter, x0=x0)        
         

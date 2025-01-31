@@ -95,14 +95,14 @@ def poisson(n_samples, grid, rhs_func=lambda grid: np.random.randn(grid*grid)):
     x_ls = device_put(jnp.stack(x_ls, axis=0))
     return A_ls, b_ls, x_ls
 
-    
+
+
 ## Functions for padding linear systems with IC(0) and ICt
 def pad_lhs_FD(A, b):
     _, _, senders, receivers = spmatrix_to_graph(A, b)
     bi_edges = bi_direc_indx(receivers[0, ...], senders[0, ...], b.shape[-1]) 
     bi_edges = jnp.repeat(bi_edges[None, ...], b.shape[0], axis=0)
-    t_ls = 0
-    return A_pad, bi_edges, 0, 0
+    return A, bi_edges, 0, 0
 
 def pad_lhs_LfromIС0(A, b):
     N = A.shape[0]

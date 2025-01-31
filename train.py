@@ -15,7 +15,7 @@ from data.graph_utils import spmatrix_to_graph
 from loss import high_freq_loss, low_freq_loss, compute_loss_precorrector, compute_loss_naivegnn
 
 from architecture.fully_connected import FullyConnected, ConstantConv1d, DummyLayer
-from architecture.neural_preconditioner_design import PreCorrectorGNN, NaiveGNN, PreCorrectorMLP, PreCorrectorMLP_StaticDiag
+from architecture.neural_preconditioner_design import PreCorrectorGNN, NaiveGNN, PreCorrectorMLP, PreCorrectorMLP_StaticDiag, PreCorrectorMultiblockGNN
 from architecture.message_passing import MessagePassing_StaticDiag, MessagePassing_NotStaticDiag, nodes_init_nodes_val, nodes_init_ones
 
 def train_inference_finetune(key, data, model_config, train_config, model_path, model_use, save_model):
@@ -28,7 +28,7 @@ def train_inference_finetune(key, data, model_config, train_config, model_path, 
             
     if model_use == 'inference' or model_use == 'fine-tune':
         model, model_config = load_hp_and_model(model_path, make_model)
-        losses = [np.nan, np.nan]
+        losses = [[np.nan], [np.nan]]
         
     if model_use == 'train' or model_use == 'fine-tune':
         model, losses = train(model, data, train_config)
@@ -55,7 +55,7 @@ def train(model, data, train_config):
         
     if train_config['model_type'] == 'naive_gnn':
         compute_loss = partial(compute_loss_naivegnn, loss_fn=loss_fn)
-    elif train_config['model_type'] == 'precorrector_mlp' or train_config['model_type'] == 'precorrector_gnn':
+    elif train_config['model_type'] in {'precorrector_mlp', 'precorrector_gnn', 'precorrector_gnn_multiblock'}:
         compute_loss = partial(compute_loss_precorrector, loss_fn=loss_fn)
     else:
         raise ValueError('Invalid model type.')
@@ -94,7 +94,7 @@ def construction_time_with_gnn(model, A_lhs_i, A_pad_i, b_i, bi_edges_i, num_rou
     nodes, edges, senders, receivers = spmatrix_to_graph(A_pad_i, b_i)
     lhs_nodes, lhs_edges, lhs_senders, lhs_receivers = spmatrix_to_graph(A_lhs_i, b_i)
     
-    if isinstance(model, (PreCorrectorGNN, NaiveGNN, PreCorrectorMLP, PreCorrectorMLP_StaticDiag)):
+    if isinstance(model, (PreCorrectorGNN, PreCorrectorMultiblockGNN, PreCorrectorMLP, PreCorrectorMLP_StaticDiag)):
         assert pre_time_ic > 0
         jit_model = jit(lambda a1, a2, a3, a4, *args: model((a1, a2, a3, a4)))
     else:
@@ -146,6 +146,32 @@ def make_neural_prec_model(key, config, model_type):
         )
         model = PreCorrectorGNN(EdgeEncoder=EdgeEncoder, EdgeDecoder=EdgeDecoder,
                                 MessagePass=MessagePass, alpha=jnp.array([config['alpha']]))
+    
+    elif model_type == 'precorrector_gnn_multiblock':
+        subkeys = random.split(key, 4)
+        mp_layer = MessagePassing_StaticDiag if config['static_diag'] else MessagePassing_NotStaticDiag
+        node_update = FullyConnected if config['node_upd_mlp'] else DummyLayer
+
+        EdgeEncoder = FullyConnected(features=config['edge_enc']['features'],
+                                     N_layers=config['edge_enc']['N_layers'],
+                                     layer_=layer_, key=subkeys[0])
+        EdgeDecoder = FullyConnected(features=config['edge_dec']['features'],
+                                     N_layers=config['edge_dec']['N_layers'],
+                                     layer_=layer_, key=subkeys[1])
+        MessagePass = mp_layer(
+            update_edge_fn = FullyConnected(features=config['mp']['edge_upd']['features'],
+                                            N_layers=config['mp']['edge_upd']['N_layers'],
+                                            layer_=layer_, key=subkeys[2]),
+            update_node_fn = node_update(features=config['mp']['node_upd']['features'],
+                                         N_layers=config['mp']['node_upd']['N_layers'],
+                                         layer_=layer_, key=subkeys[3]),
+            nodes_init_fn = nodes_init_nodes_val if config['use_nodes'] else nodes_init_ones,
+            mp_rounds = 1,
+            aggregate_edges = dict_aggregate_functions[config['mp']['aggregate_edges']]
+        )
+        model = PreCorrectorMultiblockGNN(EdgeEncoder=EdgeEncoder, EdgeDecoder=EdgeDecoder,
+                                          MessagePass=MessagePass, alpha=jnp.array([config['alpha']]),
+                                          mp_rounds=config['mp']['mp_rounds'])
     
     elif model_type == 'naive_gnn':
         subkeys = random.split(key, 5)

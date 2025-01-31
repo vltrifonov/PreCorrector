@@ -31,6 +31,39 @@ class PreCorrectorGNN(eqx.Module):
 
         low_tri = graph_to_spmatrix(nodes, edges, senders, receivers)
         return low_tri
+    
+class PreCorrectorMultiblockGNN(eqx.Module):
+    '''L = L + alpha * GNN(L)'''
+    EdgeEncoder: eqx.Module
+    MessagePass: list
+    EdgeDecoder: eqx.Module
+    alpha: jax.Array
+    mp_rounds: int = eqx.field(static=True)
+
+    def __init__(self, EdgeEncoder, MessagePass, EdgeDecoder, alpha, mp_rounds):
+        super(PreCorrectorMultiblockGNN, self).__init__()
+        self.EdgeEncoder = EdgeEncoder
+        self.MessagePass = [MessagePass] * mp_rounds
+        self.EdgeDecoder = EdgeDecoder
+        self.alpha = alpha
+        self.mp_rounds = mp_rounds
+        return
+    
+    def __call__(self, train_graph):
+        nodes, edges_init, senders, receivers = train_graph
+        norm = jnp.abs(edges_init).max()
+        edges = edges_init / norm
+        
+        edges = self.EdgeEncoder(edges[None, ...])
+        
+        for mp_block in self.MessagePass:
+            nodes, edges, senders, receivers = mp_block(nodes, edges, senders, receivers)
+        
+        edges = self.EdgeDecoder(edges)[0, ...]
+        edges = edges_init + self.alpha * (edges * norm)
+
+        low_tri = graph_to_spmatrix(nodes, edges, senders, receivers)
+        return low_tri
 
 class PreCorrectorMLP(eqx.Module):
     '''L = L + alpha * MLP(L)'''
