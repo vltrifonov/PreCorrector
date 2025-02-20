@@ -7,7 +7,7 @@ from time import perf_counter
 from jax import random
 
 from data.dataset import load_dataset
-from scipy_linsolve import make_Chol_prec_from_bcoo, batched_cg_scipy
+from scipy_linsolve import make_Chol_prec_from_bcoo, batched_cg_scipy, single_lhs_cg
 
 def script_classical_prec(config, return_meta_data):
     '''Return:
@@ -17,11 +17,11 @@ def script_classical_prec(config, return_meta_data):
     key = random.PRNGKey(config['seed'])
     data_config = config['data_config']
     
-    base_dir = os.path.join(config['path'], config['folder'], config['name'])
-    try: os.mkdir(base_dir)
+    log_dir = os.path.join(config['path'], config['folder_log'], config['name'])
+    try: os.mkdir(log_dir)
     except: pass
     
-    log_file = os.path.join(base_dir, config['name']+'.log')
+    log_file = os.path.join(log_dir, config['name']+'.log')
     
     logging.basicConfig(
         level = logging.INFO,
@@ -37,9 +37,9 @@ def script_classical_prec(config, return_meta_data):
     logging.info('Config: %s.\n', config)
     
     try:
-        results_folder_exists = os.path.isdir(os.path.join(config['path'], config['folder']))
+        log_folder_exists = os.path.isdir(os.path.join(config['path'], config['folder_log']))
         data_dir_exists = os.path.isdir(data_config['data_dir'])
-        assert os.path.isdir(config['path']) and results_folder_exists and data_dir_exists, 'Check directories'
+        assert log_folder_exists and data_dir_exists, 'Check directories'
         assert data_config['lhs_type'] in {'l_ic0', 'l_ict'}, 'Invalid `lhs_type`.'
     except Exception as e:
         logging.critical(e)
@@ -76,9 +76,10 @@ def script_classical_prec(config, return_meta_data):
         
     # CG with classical prec
     try:
-        iters_stats_class, time_stats_class, nan_flag_class = batched_cg_scipy(A_test, b_test, class_time_mean_test, 'random',
-                                                                               key, P_class, config['cg_atol'],
-                                                                               config['cg_maxiter'], thresholds=[1e-3, 1e-6, 1e-9, 1e-12])
+        cg_func = single_lhs_cg(batched_cg_scipy, single_lhs=True if A_test.shape[0] == 1 else False)
+        iters_stats_class, time_stats_class, nan_flag_class = cg_func(A=A_test, b=b_test, pre_time=class_time_mean_test, x0='random',
+                                                                      key=key, P=P_class, atol=config['cg_atol'],
+                                                                      maxiter=config['cg_maxiter'], thresholds=[1e-3, 1e-6, 1e-9, 1e-12])
         logging.info('CG with classical prec is finished:')
         logging.info(f' iterations to atol([mean, std]): %s;', iters_stats_class)
         logging.info(f' time to atol([mean, std]): %s;', time_stats_class)

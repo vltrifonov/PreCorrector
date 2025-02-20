@@ -1,6 +1,7 @@
 import os
 import getpass
 import logging
+import traceback
 from time import perf_counter
 
 import pandas as pd
@@ -8,8 +9,9 @@ from jax import random, vmap, numpy as jnp
 
 from data.dataset import load_dataset
 from data.graph_utils import spmatrix_to_graph
-from scipy_linsolve import make_Chol_prec_from_bcoo, batched_cg_scipy
 from train import construction_time_with_gnn, train_inference_finetune
+from scipy_linsolve import make_Chol_prec_from_bcoo, batched_cg_scipy, single_lhs_cg
+from architecture.neural_preconditioner_design import PreCorrectorGNN, NaiveGNN, PreCorrectorMLP, PreCorrectorMLP_StaticDiag, PreCorrectorMultiblockGNN
 
 def script_gnn_prec(config, return_meta_data):
     '''Return:
@@ -21,13 +23,17 @@ def script_gnn_prec(config, return_meta_data):
     model_config = config['model_config']
     train_config = config['train_config']
 
-    base_dir = os.path.join(config['path'], config['folder'], config['name'])
+    base_dir = os.path.join(config['path'], config['folder_model'], config['name'])
     try: os.mkdir(base_dir)
     except: pass
     
+    log_dir = os.path.join(config['path'], config['folder_log'], config['name'])
+    try: os.mkdir(log_dir)
+    except: pass
+    
     model_file = os.path.join(base_dir, config['name']+'.eqx')
-    log_file = os.path.join(base_dir, config['name']+'.log')
-    loss_file = os.path.join(base_dir, 'losses_'+config['name']+'.npz')
+    log_file = os.path.join(log_dir, config['name']+'.log')
+    loss_file = os.path.join(log_dir, 'losses_'+config['name']+'.npz')
     
     logging.basicConfig(
         level = logging.INFO,
@@ -43,9 +49,10 @@ def script_gnn_prec(config, return_meta_data):
     logging.info('Config: %s.\n', config)
     
     try:
-        results_folder_exists = os.path.isdir(os.path.join(config['path'], config['folder']))
+        results_folder_exists = os.path.isdir(os.path.join(config['path'], config['folder_model']))
+        log_folder_exists = os.path.isdir(os.path.join(config['path'], config['folder_log']))
         data_dir_exists = os.path.isdir(data_config['data_dir'])
-        assert os.path.isdir(config['path']) and results_folder_exists and data_dir_exists, 'Check directories'
+        assert results_folder_exists and log_folder_exists and data_dir_exists, 'Check directories'
     except Exception as e:
         logging.critical(traceback.format_exc())
         return False
@@ -53,9 +60,14 @@ def script_gnn_prec(config, return_meta_data):
     # Data loading
     try:
         s = perf_counter()
-        train_set = load_dataset(data_config, return_train=True)
-        A_train, A_pad_train, b_train, bi_edges_train, x_train, class_time_mean_train, class_time_std_train = train_set
-
+        if config['model_use'] in {'train', 'fine-tune'}:
+            train_set = load_dataset(data_config, return_train=True)
+            A_train, A_pad_train, b_train, bi_edges_train, x_train, class_time_mean_train, class_time_std_train = train_set
+        else:
+            A_train, A_pad_train, b_train = None, None, None
+            bi_edges_train, x_train = None, None
+            class_time_mean_train, class_time_std_train = None, None
+            
         test_set = load_dataset(data_config, return_train=False)
         A_test, A_pad_test, b_test, bi_edges_test, x_test, class_time_mean_test, class_time_std_test = test_set
 
@@ -88,13 +100,26 @@ def script_gnn_prec(config, return_meta_data):
     except Exception as e:
         logging.critical(f'Script failed on model training.\n{traceback.format_exc()}\n\n\n')
         return False
-    
+
     # Preconditioner construction
     try:
         time_gnn_mean, time_gnn_std = construction_time_with_gnn(model, A_test[0, ...], A_pad_test[0, ...], b_test[0, ...],
                                                                  bi_edges_test[0, ...], num_rounds=A_test.shape[0],
                                                                  pre_time_ic=class_time_mean_test)
-        L = vmap(model, in_axes=(0), out_axes=(0))(spmatrix_to_graph(A_pad_test, b_test))
+        if A_pad_test.shape[0] > 1:
+            if isinstance(model, (PreCorrectorGNN, PreCorrectorMultiblockGNN, PreCorrectorMLP, PreCorrectorMLP_StaticDiag)):
+                L = vmap(model, in_axes=(0), out_axes=(0))(spmatrix_to_graph(A_pad_test, b_test))
+            else:
+                L = vmap(model, in_axes=((0,0,0,0),0,(0,0,0,0)), out_axes=(0))(
+                    spmatrix_to_graph(A_pad_test, b_test),
+                    bi_edges_test,
+                    spmatrix_to_graph(A_test, b_test)
+                )
+        else:
+            if isinstance(model, (PreCorrectorGNN, PreCorrectorMultiblockGNN, PreCorrectorMLP, PreCorrectorMLP_StaticDiag)):
+                L = vmap(model, in_axes=(0), out_axes=(0))(spmatrix_to_graph(A_pad_test, b_test[0:1, ...]))
+            else:
+                assert False
         P = make_Chol_prec_from_bcoo(L)
 
         logging.info(f'Precs are combined:')
@@ -105,9 +130,10 @@ def script_gnn_prec(config, return_meta_data):
         
     # CG with PreCorrector's prec
     try:
-        iters_stats, time_stats, nan_flag = batched_cg_scipy(A_test, b_test, time_gnn_mean, 'random',
-                                                             key, P, config['cg_atol'],
-                                                             config['cg_maxiter'], thresholds=[1e-3, 1e-6, 1e-9, 1e-12])
+        cg_func = single_lhs_cg(batched_cg_scipy, single_lhs=True if A_test.shape[0] == 1 else False)
+        iters_stats, time_stats, nan_flag = cg_func(A=A_test, b=b_test, pre_time=time_gnn_mean, x0='random',
+                                                    key=key, P=P, atol=config['cg_atol'],
+                                                    maxiter=config['cg_maxiter'], thresholds=[1e-3, 1e-6, 1e-9, 1e-12])
         logging.info('CG with GNN is finished:')
         logging.info(f' iterations to atol([mean, std]): %s;', iters_stats)
         logging.info(f' time to atol([mean, std]): %s;', time_stats)
@@ -128,8 +154,8 @@ def script_gnn_prec(config, return_meta_data):
             'seed': f'{config["seed"]:.0f}',
 #             Train/model
             'model_type': train_config["model_type"],
-            'use_nodes': True if train_config['model_type'] != 'precorrector_gnn' else model_config["use_nodes"],
-            'node_upd_mlp': True if train_config['model_type'] != 'precorrector_gnn' else model_config["node_upd_mlp"],
+            'use_nodes': True if train_config['model_type'] == 'naive_gnn' else model_config["use_nodes"],
+            'node_upd_mlp': True if train_config['model_type'] == 'naive_gnn' else model_config["node_upd_mlp"],
             'static_diag': True if train_config['model_type'] == 'naive_gnn' else model_config["static_diag"],
             'aggregate_edges': '-' if train_config['model_type'] == 'precorrector_mlp' else model_config['mp']['aggregate_edges'],
             'loss_type': train_config["loss_type"],
