@@ -23,7 +23,7 @@ def load_dataset(config, return_train):
     
 def elliptic_dataset_from_hard(return_train, N_samples, data_dir, pde, grid,
                                variance, lhs_type, fill_factor, threshold, **kwargs):
-    assert grid in {32, 64, 128, 256}
+    assert grid in {32, 64, 128, 256, 400, 512}
     data_dir = os.path.join(data_dir, 'paper_datasets')
     cov_model = 'Gauss'
     

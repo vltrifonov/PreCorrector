@@ -25,6 +25,11 @@ class PreCorrectorGNN(eqx.Module):
         edges = edges_init / norm
         
         edges = self.EdgeEncoder(edges[None, ...])
+#         edges = jax.nn.relu(edges)
+#         print('\n EDGE ENCODER \n')
+#         print('MIN', jnp.min(jnp.abs(edges)))
+#         print('MAX', jnp.max(jnp.abs(edges)))        
+        
         nodes, edges, senders, receivers = self.MessagePass(nodes, edges, senders, receivers)
         edges = self.EdgeDecoder(edges)[0, ...]
         edges = edges_init + self.alpha * (edges * norm)
